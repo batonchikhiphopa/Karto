@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="system">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="meta.title">Karto</title>
+  <meta name="theme-color" content="#0d1014">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    (function() {
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("karto.theme") || "system";
+      } catch {
+        document.documentElement.dataset.theme = "system";
+      }
+    })();
+  </script>
+</head>
+<body>
+  <div class="mobile-topbar">
+    <button
+      id="sidebarToggleBtn"
+      class="mobile-topbar-btn"
+      type="button"
+      aria-label="Open navigation"
+      data-i18n-aria-label="sidebar.open"
+      data-i18n-title="sidebar.open"
+    >
+      <span aria-hidden="true">☰</span>
+    </button>
+    <div class="mobile-brand" aria-label="Karto">
+      <img src="logo.svg" alt="Karto logo">
+      <span>Karto</span>
+    </div>
+  </div>
+
+  <div id="sidebarOverlay" class="sidebar-overlay" hidden></div>
+
+  <div class="app-shell">
+    <div id="sidebarMount"></div>
+
+    <main class="main" id="appMain">
+      <section id="homeScreen" class="screen is-active" aria-labelledby="homeTitle">
+        <div class="screen-header">
+          <div>
+            <h1 id="homeTitle" class="screen-title">Karto</h1>
+            <p class="screen-subtitle" data-i18n="home.subtitle">Study your decks with Karto.</p>
+          </div>
+        </div>
+        <div class="deck-grid" id="deckGrid"></div>
+      </section>
+
+      <section id="libraryScreen" class="screen" aria-labelledby="libraryTitle">
+        <div class="screen-header">
+          <div>
+            <h2 id="libraryTitle" class="screen-title" data-i18n="library.title">Library</h2>
+            <p class="screen-subtitle" data-i18n="library.subtitle">Manage decks, exports, and imports.</p>
+          </div>
+        </div>
+
+        <div class="lib-toolbar" id="libraryToolbar">
+          <button class="lib-btn lib-btn-green" id="libCreateDeckBtn" type="button" data-i18n="library.createDeck">+ Create deck</button>
+          <button class="lib-btn lib-btn-green" id="libCreateCardBtn" type="button" data-i18n="library.createCard">+ Create card</button>
+          <button class="lib-btn" id="libMergeBtn" type="button" data-i18n="library.merge">Merge decks</button>
+          <button class="lib-btn" id="libExportBtn" type="button" data-i18n="library.exportAll">Export decks</button>
+          <button class="lib-btn" id="libCsvExportBtn" type="button" data-i18n="library.exportCsv">Export CSV</button>
+          <button class="lib-btn" id="libImportBtn" type="button" data-i18n="library.importAll">Import decks</button>
+        </div>
+
+        <div class="lib-deck-list" id="libraryDeckList"></div>
+      </section>
+
+      <section id="editDeckScreen" class="screen" aria-labelledby="editDeckTitle">
+        <div class="screen-header screen-header-stack">
+          <button class="back-btn" id="backFromEditDeckBtn" type="button" data-i18n="common.back">Back</button>
+          <div>
+            <h2 id="editDeckTitle" class="screen-title" data-i18n="editDeck.title">Deck editor</h2>
+            <p class="screen-subtitle" data-i18n="editDeck.subtitle">Sort, search, and study cards from one place.</p>
+          </div>
+          <div class="editdeck-name-row">
+            <input
+              class="editdeck-name-input"
+              id="editDeckNameInput"
+              data-i18n-placeholder="editDeck.namePlaceholder"
+              placeholder="Deck name"
+              aria-label="Deck name"
+            >
+            <button class="lib-btn lib-btn-green" id="renameDeckBtn" type="button" data-i18n="editDeck.saveName">Save</button>
+          </div>
+        </div>
+
+        <div class="lib-toolbar">
+          <button class="lib-btn lib-btn-green" id="editDeckCreateCardBtn" type="button" data-i18n="editDeck.createCard">+ Create card</button>
+          <button class="lib-btn" id="editDeckAddFromOtherBtn" type="button" data-i18n="editDeck.addFromOther">+ Add from another deck</button>
+          <button class="lib-btn" id="editDeckExportBtn" type="button" data-i18n="editDeck.export">Export</button>
+          <button class="lib-btn" id="editDeckExportCsvBtn" type="button" data-i18n="editDeck.exportCsv">Export CSV</button>
+          <button class="lib-btn" id="editDeckImportBtn" type="button" data-i18n="editDeck.import">Import</button>
+          <input
+            class="form-input editdeck-search"
+            id="editDeckSearchInput"
+            data-i18n-placeholder="editDeck.searchPlaceholder"
+            placeholder="Search cards..."
+            aria-label="Search cards"
+          >
+        </div>
+
+        <div class="bulk-toolbar" id="bulkToolbar">
+          <div class="bulk-summary" id="bulkSummary" data-i18n="bulk.noneSelected">No cards selected</div>
+          <button class="lib-btn" id="selectAllCardsBtn" type="button" data-i18n="bulk.selectAll">Select all</button>
+          <select class="form-input bulk-move-select" id="bulkMoveDeckSelect" aria-label="Move selected cards to deck"></select>
+          <button class="lib-btn" id="bulkMoveBtn" type="button" data-i18n="bulk.moveSelected">Move selected</button>
+          <button class="lib-btn lib-btn-danger" id="bulkDeleteBtn" type="button" data-i18n="bulk.deleteSelected">Delete selected</button>
+        </div>
+
+        <div class="study-toolbar">
+          <label class="form-label" for="studyModeSelect" data-i18n="study.startModeLabel">Study mode</label>
+          <select class="form-input study-mode-select" id="studyModeSelect">
+            <option value="all" data-i18n="study.modeAll">All cards</option>
+            <option value="new" data-i18n="study.modeNew">New cards only</option>
+            <option value="review" data-i18n="study.modeReview">Review</option>
+          </select>
+          <button class="lib-btn lib-btn-green" id="startDeckStudyBtn" type="button" data-i18n="study.startStudy">Start study</button>
+        </div>
+
+        <div class="card-list" id="editDeckCardList"></div>
+      </section>
+
+      <section id="settingsScreen" class="screen" aria-labelledby="settingsTitle">
+        <div class="screen-header">
+          <div>
+            <h2 id="settingsTitle" class="screen-title" data-i18n="settings.title">Settings</h2>
+            <p class="screen-subtitle" data-i18n="settings.subtitle">Choose language, theme, and review recent study sessions.</p>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <div class="settings-panel">
+            <div class="settings-row">
+              <label for="languageSelect" data-i18n="settings.language">Interface language</label>
+              <select id="languageSelect">
+                <option value="en" data-i18n="settings.languageOptionEn">English</option>
+                <option value="de" data-i18n="settings.languageOptionDe">Deutsch</option>
+                <option value="ru" data-i18n="settings.languageOptionRu">Русский</option>
+              </select>
+            </div>
+
+            <div class="settings-row">
+              <label for="themeSelect" data-i18n="settings.theme">Theme</label>
+              <select id="themeSelect">
+                <option value="system" data-i18n="settings.themeSystem">System</option>
+                <option value="dark" data-i18n="settings.themeDark">Dark</option>
+                <option value="light" data-i18n="settings.themeLight">Light</option>
+              </select>
+            </div>
+
+            <div class="settings-row">
+              <button class="lib-btn lib-btn-danger" id="resetBtn" type="button" data-i18n="settings.reset">Reset all data</button>
+            </div>
+          </div>
+
+          <div class="settings-panel">
+            <h3 class="settings-section-title" data-i18n="settings.sessionHistory">Session history</h3>
+            <div class="session-history-list" id="sessionHistoryList"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="createCardScreen" class="screen" aria-labelledby="cardFormTitle">
+        <div class="screen-header">
+          <button class="back-btn" id="backFromCardFormBtn" type="button" data-i18n="common.back">Back</button>
+          <div>
+            <h2 id="cardFormTitle" class="screen-title" data-i18n="cardForm.titleCreate">Create card</h2>
+            <p class="screen-subtitle" data-i18n="cardForm.subtitle">Build the front and back, then preview before saving.</p>
+          </div>
+        </div>
+
+        <div class="form-layout">
+          <div class="form-inner">
+            <div class="form-body">
+              <label class="form-label" for="frontTextInput" data-i18n="cardForm.frontLabel">Front side</label>
+              <input class="form-input" id="frontTextInput" data-i18n-placeholder="cardForm.frontPlaceholder" placeholder="Word or question">
+
+              <div class="form-row-btns">
+                <button class="lib-btn" id="getDefinitionBtn" type="button" data-i18n="cardForm.getDefinition">Get definition</button>
+                <label class="form-label inline-label" for="dictLangSelect" data-i18n="cardForm.dictLang">Dictionary language</label>
+                <select id="dictLangSelect" class="form-input dict-lang-select">
+                  <option value="en" data-i18n="cardForm.dictLangEn">English</option>
+                  <option value="de" data-i18n="cardForm.dictLangDe">Deutsch</option>
+                  <option value="ru" data-i18n="cardForm.dictLangRu">Русский</option>
+                </select>
+                <button class="lib-btn" id="searchImagesBtn" type="button" data-i18n="cardForm.searchImages">Find images</button>
+              </div>
+
+              <label class="form-label" for="backTextInput" data-i18n="cardForm.backLabel">Back side</label>
+              <textarea class="form-input form-textarea" id="backTextInput" data-i18n-placeholder="cardForm.backPlaceholder" placeholder="Definition or answer"></textarea>
+
+              <label class="form-label" for="imageInput" data-i18n="cardForm.imageLabel">Image (URL)</label>
+              <input class="form-input" id="imageInput" data-i18n-placeholder="cardForm.imagePlaceholder" placeholder="Paste a link or choose below">
+
+              <label class="form-label" for="imageFileInput" data-i18n="cardForm.uploadImage">Upload image</label>
+              <input class="form-input form-file-input" id="imageFileInput" type="file" accept="image/*">
+
+              <div class="image-preview-wrap" id="imagePreviewWrap">
+                <img class="image-preview-thumb" id="imagePreviewThumb" src="" alt="">
+                <button
+                  class="image-preview-clear"
+                  id="imagePreviewClearBtn"
+                  type="button"
+                  aria-label="Clear image"
+                  data-i18n-aria-label="cardForm.clearImage"
+                  data-i18n-title="cardForm.clearImage"
+                >
+                  <span aria-hidden="true">✕</span>
+                </button>
+              </div>
+
+              <div id="imageResults" class="image-results" aria-live="polite"></div>
+
+              <label class="form-label" for="deckSelect" data-i18n="cardForm.deckLabel">Deck</label>
+              <select class="form-input" id="deckSelect"></select>
+
+              <button class="lib-btn lib-btn-green" id="saveCardBtn" type="button" data-i18n="cardForm.save">Save card</button>
+            </div>
+          </div>
+
+          <aside class="preview-panel">
+            <div class="preview-panel-header">
+              <h3 data-i18n="cardForm.previewTitle">Live preview</h3>
+              <button
+                class="lib-btn"
+                id="previewFlipBtn"
+                type="button"
+                aria-label="Flip preview"
+                data-i18n="cardForm.flipPreview"
+              >
+                Flip preview
+              </button>
+            </div>
+            <div class="preview-card" id="formPreviewCard" tabindex="0" role="button" aria-live="polite">
+              <div class="preview-card-tag" id="formPreviewTag" data-i18n="study.question">Question</div>
+              <img class="preview-card-image" id="formPreviewImage" src="" alt="" hidden>
+              <div class="preview-card-text" id="formPreviewText"></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="createDeckScreen" class="screen" aria-labelledby="createDeckTitle">
+        <div class="screen-header">
+          <button class="back-btn" id="backFromCreateDeckBtn" type="button" data-i18n="common.back">Back</button>
+          <div>
+            <h2 id="createDeckTitle" class="screen-title" data-i18n="createDeck.title">Create deck</h2>
+          </div>
+        </div>
+
+        <div class="form-inner form-inner-compact">
+          <div class="form-body">
+            <label class="form-label" for="newDeckNameInput" data-i18n="createDeck.nameLabel">Name</label>
+            <input class="form-input" id="newDeckNameInput" data-i18n-placeholder="createDeck.namePlaceholder" placeholder="Deck name">
+            <button class="lib-btn lib-btn-green" id="saveDeckBtn" type="button" data-i18n="createDeck.save">Create</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="mergeDecksScreen" class="screen" aria-labelledby="mergeTitle">
+        <div class="screen-header">
+          <button class="back-btn" id="backFromMergeBtn" type="button" data-i18n="common.back">Back</button>
+          <div>
+            <h2 id="mergeTitle" class="screen-title" data-i18n="merge.title">Merge decks</h2>
+          </div>
+        </div>
+
+        <div class="form-inner form-inner-compact">
+          <div class="form-body">
+            <label class="form-label" data-i18n="merge.selectLabel">Choose decks to merge</label>
+            <div id="mergeCheckboxList" class="merge-checkbox-list"></div>
+            <label class="form-label" for="mergeNewNameInput" data-i18n="merge.newNameLabel">New deck name</label>
+            <input class="form-input" id="mergeNewNameInput" data-i18n-placeholder="merge.namePlaceholder" placeholder="Name">
+            <button class="lib-btn lib-btn-green" id="confirmMergeBtn" type="button" data-i18n="merge.confirm">Merge</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="addFromOtherScreen" class="screen" aria-labelledby="addFromOtherTitle">
+        <div class="screen-header">
+          <button class="back-btn" id="backFromAddOtherBtn" type="button" data-i18n="common.back">Back</button>
+          <div>
+            <h2 id="addFromOtherTitle" class="screen-title" data-i18n="addFromOther.title">Add from another deck</h2>
+            <p class="screen-subtitle" data-i18n="addFromOther.subtitle">Copy cards from one deck into another.</p>
+          </div>
+        </div>
+
+        <div class="form-inner">
+          <div class="form-body">
+            <label class="form-label" for="sourceOtherDeckSelect" data-i18n="addFromOther.sourceDeck">Source deck</label>
+            <select class="form-input" id="sourceOtherDeckSelect"></select>
+            <div id="sourceCardList" class="source-card-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="studyScreen" class="screen screen-study" aria-labelledby="studyTitle">
+        <div class="study-wrap" id="studyWrap">
+          <h2 id="studyTitle" class="visually-hidden" data-i18n="study.title">Study mode</h2>
+
+          <button
+            class="study-exit-btn"
+            id="exitStudyBtn"
+            type="button"
+            aria-label="Close study mode"
+            data-i18n-aria-label="study.close"
+            data-i18n-title="study.close"
+          >
+            <span aria-hidden="true">✕</span>
+          </button>
+
+          <div class="study-progress-row">
+            <div class="study-progress" id="studyProgress"></div>
+            <div class="study-session-stats" id="studySessionStats"></div>
+          </div>
+
+          <button class="study-edge study-edge-left" id="wrongZone" type="button" aria-label="Don't know">
+            <span class="study-edge-label" id="wrongLabel" data-i18n="study.wrong">Don't know</span>
+          </button>
+          <button class="study-edge study-edge-right" id="correctZone" type="button" aria-label="Know it">
+            <span class="study-edge-label" id="correctLabel" data-i18n="study.correct">Know it</span>
+          </button>
+          <button class="study-edge study-edge-bottom" id="unsureZone" type="button" aria-label="Not sure">
+            <span class="study-edge-label" id="unsureLabel" data-i18n="study.unsure">Not sure</span>
+          </button>
+          <button class="study-edge study-edge-top" id="backZone" type="button" aria-label="Back">
+            <span class="study-edge-label" id="backLabel" data-i18n="study.back">Back</span>
+          </button>
+
+          <div class="study-card-area">
+            <div class="study-card" id="studyCard" tabindex="0" role="button" aria-live="polite"></div>
+          </div>
+
+          <div class="study-hint" id="studyHint"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <template id="sidebarTemplate">
+    <aside class="sidebar" id="appSidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-logo">
+          <img src="logo.svg" data-i18n-alt="meta.logoAlt" alt="Karto logo">
+        </div>
+        <div class="sidebar-brand-text">
+          <p class="sidebar-kicker">Karto</p>
+          <h1 class="sidebar-title">Karto</h1>
+        </div>
+        <button
+          class="sidebar-close"
+          id="sidebarCloseBtn"
+          type="button"
+          aria-label="Close navigation"
+          data-i18n-aria-label="sidebar.close"
+          data-i18n-title="sidebar.close"
+        >
+          <span aria-hidden="true">✕</span>
+        </button>
+      </div>
+
+      <nav class="sidebar-panel" aria-label="Primary">
+        <button class="sidebar-link active" type="button" data-nav="homeScreen" data-i18n="nav.home">Home</button>
+        <button class="sidebar-link" type="button" data-nav="libraryScreen" data-i18n="nav.library">Library</button>
+        <button class="sidebar-link" type="button" data-nav="settingsScreen" data-i18n="nav.settings">Settings</button>
+      </nav>
+    </aside>
+  </template>
+
+  <script src="i18n.js"></script>
+  <script src="js/data-model.js"></script>
+  <script src="js/dom-utils.js"></script>
+  <script src="js/study-engine.js"></script>
+  <script src="js/app-state.js"></script>
+  <script src="js/router.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui/sidebar.js"></script>
+  <script src="js/ui/toast.js"></script>
+  <script src="js/views/home-view.js"></script>
+  <script src="js/views/library-view.js"></script>
+  <script src="js/views/deck-editor-view.js"></script>
+  <script src="js/views/card-form-view.js"></script>
+  <script src="js/views/study-view.js"></script>
+  <script src="js/views/settings-view.js"></script>
+  <script src="js/pwa.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

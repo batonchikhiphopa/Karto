@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 160 160"
+     width="160" height="160">
+
+  <defs>
+    <linearGradient id="tr-leaf" x1="46" y1="110" x2="118" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ff4a3d"/>
+      <stop offset="50%" stop-color="#ffd84a"/>
+      <stop offset="100%" stop-color="#38d66b"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="24" y="24" width="112" height="112" rx="30" fill="#262930"/>
+
+  <path d="
+    M 50 106
+    C 63 84, 83 66, 111 57
+    C 101 68, 90 80, 77 94
+    C 71 100, 64 106, 58 112
+    C 56 108, 53 107, 50 106
+    Z
+  " fill="url(#tr-leaf)"/>
+</svg>
