@@ -71,17 +71,10 @@
       }
 
       clearElement(cardElement);
-      progressElement.textContent = `${ctx.state.study.currentIndex + 1} / ${ctx.state.study.queue.length}`;
 
       const correctPercent = session.reviewed
         ? Math.round((session.correct / session.reviewed) * 100)
         : 0;
-
-      statsElement.textContent = t("study.stats", {
-        reviewed: session.reviewed,
-        percent: correctPercent,
-        mode: getModeLabel(session.mode)
-      });
 
       cardElement.appendChild(createElement("div", {
         className: "study-card-tag",
@@ -203,7 +196,7 @@
 
     cardElement.addEventListener("click", handleCardAdvance);
     cardElement.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
+      if (event.key === " ") {
         event.preventDefault();
         handleCardAdvance();
       }
@@ -252,27 +245,22 @@
 
       switch (event.key) {
         case " ":
-        case "Enter":
           event.preventDefault();
           handleCardAdvance();
           break;
         case "ArrowLeft":
-        case "1":
           event.preventDefault();
           answer("wrong", getStudyBase(ctx.state.study.queue.length));
           break;
         case "ArrowDown":
-        case "2":
           event.preventDefault();
           answer("unsure", getStudyBase(ctx.state.study.queue.length) * 3);
           break;
         case "ArrowRight":
-        case "3":
           event.preventDefault();
           answer("correct", getStudyBase(ctx.state.study.queue.length) * 6);
           break;
         case "ArrowUp":
-        case "Backspace":
           event.preventDefault();
           goBack();
           break;
