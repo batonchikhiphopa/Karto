@@ -3,24 +3,210 @@
 
   function createHomeView(ctx) {
     const grid = document.getElementById("deckGrid");
+    const rotationStates = new Map();
+    const reducedMotionQuery = typeof root.matchMedia === "function"
+      ? root.matchMedia("(prefers-reduced-motion: reduce)")
+      : null;
+    let isActive = false;
+
+    function prefersReducedMotion() {
+      return !!reducedMotionQuery?.matches;
+    }
+
+    function randomIndex(length) {
+      return length > 0 ? Math.floor(root.Math.random() * length) : 0;
+    }
+
+    function shuffle(values) {
+      const copy = values.slice();
+
+      for (let index = copy.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(root.Math.random() * (index + 1));
+        [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+      }
+
+      return copy;
+    }
+
+    function getDeckImages(deck) {
+      const seen = new Set();
+
+      return deck.cards
+        .map((card) => String(card.image || "").trim())
+        .filter((imageUrl) => {
+          if (!imageUrl || seen.has(imageUrl)) {
+            return false;
+          }
+
+          seen.add(imageUrl);
+          return true;
+        });
+    }
+
+    function buildRotationQueue(images, currentIndex) {
+      return shuffle(images.map((_, index) => index).filter((index) => index !== currentIndex));
+    }
+
+    function stopRotation(state) {
+      if (!state) return;
+
+      if (state.timeoutId !== null) {
+        root.clearTimeout(state.timeoutId);
+        state.timeoutId = null;
+      }
+
+      if (state.transitionId !== null) {
+        root.clearTimeout(state.transitionId);
+        state.transitionId = null;
+      }
+
+      const activeImage = state.imageNodes.find((node) => node.classList.contains("is-active")) || state.activeImage;
+      state.activeImage = activeImage;
+      state.inactiveImage = state.imageNodes.find((node) => node !== activeImage) || state.inactiveImage;
+
+      state.imageNodes.forEach((imageNode) => {
+        if (imageNode === state.activeImage) {
+          imageNode.classList.add("is-active");
+          return;
+        }
+
+        imageNode.classList.remove("is-active");
+        imageNode.removeAttribute("src");
+      });
+    }
+
+    function clearRotationStates() {
+      rotationStates.forEach(stopRotation);
+      rotationStates.clear();
+    }
+
+    function scheduleRotation(state) {
+      if (!isActive || prefersReducedMotion() || state.images.length < 2) {
+        return;
+      }
+
+      state.timeoutId = root.setTimeout(() => {
+        state.timeoutId = null;
+        rotateToNextImage(state);
+      }, 4500 + Math.floor(root.Math.random() * 2501));
+    }
+
+    function rotateToNextImage(state) {
+      if (!isActive || prefersReducedMotion() || state.images.length < 2) {
+        return;
+      }
+
+      if (!state.queue.length) {
+        state.queue = buildRotationQueue(state.images, state.currentIndex);
+      }
+
+      const nextIndex = state.queue.shift();
+      if (nextIndex === undefined || nextIndex === state.currentIndex) {
+        scheduleRotation(state);
+        return;
+      }
+
+      const outgoing = state.activeImage;
+      const incoming = state.inactiveImage;
+
+      incoming.classList.remove("is-active");
+      incoming.src = state.images[nextIndex];
+      incoming.alt = state.alt;
+
+      root.requestAnimationFrame(() => {
+        incoming.classList.add("is-active");
+        outgoing.classList.remove("is-active");
+      });
+
+      state.transitionId = root.setTimeout(() => {
+        state.transitionId = null;
+
+        const previous = state.activeImage;
+        state.activeImage = incoming;
+        state.inactiveImage = previous;
+        state.currentIndex = nextIndex;
+
+        state.inactiveImage.classList.remove("is-active");
+        state.inactiveImage.removeAttribute("src");
+
+        scheduleRotation(state);
+      }, 760);
+    }
+
+    function activate() {
+      isActive = true;
+      rotationStates.forEach((state) => {
+        stopRotation(state);
+        scheduleRotation(state);
+      });
+    }
+
+    function deactivate() {
+      isActive = false;
+      rotationStates.forEach(stopRotation);
+    }
+
+    function createDeckMediaStage(deck, images) {
+      const stage = createElement("div", {
+        className: `deck-media-stage${images.length ? "" : " is-empty"}`,
+        attrs: { "aria-hidden": "true" }
+      });
+
+      if (!images.length) {
+        return stage;
+      }
+
+      const startIndex = randomIndex(images.length);
+      const activeImage = createElement("img", {
+        className: "deck-media-image is-active",
+        attrs: {
+          src: images[startIndex],
+          alt: deck.name,
+          loading: "lazy",
+          decoding: "async"
+        }
+      });
+
+      stage.appendChild(activeImage);
+
+      if (images.length === 1 || prefersReducedMotion()) {
+        return stage;
+      }
+
+      const inactiveImage = createElement("img", {
+        className: "deck-media-image",
+        attrs: {
+          alt: deck.name,
+          loading: "lazy",
+          decoding: "async"
+        }
+      });
+
+      stage.appendChild(inactiveImage);
+
+      rotationStates.set(deck.id, {
+        alt: deck.name,
+        images,
+        currentIndex: startIndex,
+        queue: buildRotationQueue(images, startIndex),
+        activeImage,
+        inactiveImage,
+        imageNodes: [activeImage, inactiveImage],
+        timeoutId: null,
+        transitionId: null
+      });
+
+      return stage;
+    }
 
     function createDeckTile(deck) {
-      const previewCard = deck.cards.find((card) => card.image);
+      const images = getDeckImages(deck);
       const tile = createElement("div", {
-        className: "deck-tile",
+        className: `deck-tile${images.length ? "" : " deck-tile-no-image"}`,
         dataset: { deckId: deck.id }
       });
 
-      if (previewCard) {
-        tile.appendChild(
-          createElement("img", {
-            attrs: {
-              src: previewCard.image,
-              alt: deck.name
-            }
-          })
-        );
-      }
+      tile.appendChild(createDeckMediaStage(deck, images));
 
       tile.appendChild(createElement("div", {
         className: "deck-overlay",
@@ -122,6 +308,7 @@
     }
 
     function render() {
+      clearRotationStates();
       clearElement(grid);
 
       ctx.state.decks.forEach((deck) => {
@@ -129,6 +316,22 @@
       });
 
       grid.appendChild(createCreateDeckTile());
+
+      if (isActive) {
+        activate();
+      }
+    }
+
+    function handleReducedMotionChange() {
+      render();
+    }
+
+    if (reducedMotionQuery) {
+      if (typeof reducedMotionQuery.addEventListener === "function") {
+        reducedMotionQuery.addEventListener("change", handleReducedMotionChange);
+      } else if (typeof reducedMotionQuery.addListener === "function") {
+        reducedMotionQuery.addListener(handleReducedMotionChange);
+      }
     }
 
     grid.addEventListener("click", (event) => {
@@ -157,6 +360,8 @@
     });
 
     return {
+      activate,
+      deactivate,
       render
     };
   }

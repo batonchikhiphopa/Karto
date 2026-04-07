@@ -1,12 +1,12 @@
 (function(root, factory) {
-  const api = factory();
+  const api = factory(root);
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
 
   Object.assign(root, api);
-})(typeof window !== "undefined" ? window : globalThis, function() {
+})(typeof window !== "undefined" ? window : globalThis, function(root) {
   function createStudyState(deck) {
     const cards = Array.isArray(deck?.cards) ? deck.cards : [];
 

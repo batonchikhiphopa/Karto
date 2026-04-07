@@ -4,17 +4,8 @@
   function createStudyView(ctx) {
     const wrap = document.getElementById("studyWrap");
     const cardElement = document.getElementById("studyCard");
-    const hintElement = document.getElementById("studyHint");
-    const progressElement = document.getElementById("studyProgress");
-    const statsElement = document.getElementById("studySessionStats");
-
-    function getModeLabel(mode) {
-      return t(
-        mode === "new" ? "study.modeNew" :
-        mode === "review" ? "study.modeReview" :
-        "study.modeAll"
-      );
-    }
+    const imageMetaCache = new Map();
+    let resizeFrameId = null;
 
     function resetLabels() {
       ["wrongLabel", "correctLabel", "unsureLabel", "backLabel"].forEach((id) => {
@@ -35,6 +26,97 @@
 
     function clamp(value, min, max) {
       return Math.max(min, Math.min(max, value));
+    }
+
+    function getCurrentSide() {
+      return ctx.state.study.flipped ? "back" : "front";
+    }
+
+    function getCurrentText(card) {
+      return ctx.state.study.flipped ? card.backText : card.frontText;
+    }
+
+    function getCurrentImage(card, currentSide) {
+      if (!card?.image) {
+        return null;
+      }
+
+      return (card.imageSide || "back") === currentSide ? card.image : null;
+    }
+
+    function isLongStudyText(text) {
+      const normalizedText = String(text || "").trim();
+      const lineBreaks = (normalizedText.match(/\n/g) || []).length;
+      return normalizedText.length > 120 || lineBreaks >= 2;
+    }
+
+    function renderIfCurrentImage(url) {
+      const currentCard = getCurrentStudyCard(ctx.state.study);
+      if (!currentCard || currentCard.image !== url || !ctx.router.isVisible("studyScreen")) {
+        return;
+      }
+
+      render();
+    }
+
+    function ensureImageMeta(url) {
+      if (!url) return null;
+
+      const cached = imageMetaCache.get(url);
+      if (cached) {
+        return cached;
+      }
+
+      const entry = {
+        status: "loading",
+        aspectRatio: null
+      };
+
+      imageMetaCache.set(url, entry);
+
+      const probe = new Image();
+      probe.addEventListener("load", () => {
+        entry.status = "loaded";
+        entry.aspectRatio = probe.naturalWidth && probe.naturalHeight
+          ? probe.naturalWidth / probe.naturalHeight
+          : 1;
+        renderIfCurrentImage(url);
+      }, { once: true });
+      probe.addEventListener("error", () => {
+        entry.status = "error";
+        entry.aspectRatio = null;
+        renderIfCurrentImage(url);
+      }, { once: true });
+      probe.src = url;
+
+      return entry;
+    }
+
+    function resolveMediaLayout(currentSide, text, imageUrl) {
+      if (!imageUrl) {
+        return "text-only";
+      }
+
+      if (currentSide === "front") {
+        ensureImageMeta(imageUrl);
+        return "top";
+      }
+
+      if (root.innerWidth < 960) {
+        ensureImageMeta(imageUrl);
+        return "top";
+      }
+
+      const meta = ensureImageMeta(imageUrl);
+      if (!meta || meta.status !== "loaded" || typeof meta.aspectRatio !== "number") {
+        return "top";
+      }
+
+      if (meta.aspectRatio < 1.05) {
+        return "top";
+      }
+
+      return isLongStudyText(text) ? "side" : "top";
     }
 
     function finishSession() {
@@ -59,44 +141,61 @@
 
     function render() {
       const card = getCurrentStudyCard(ctx.state.study);
-      const session = ctx.state.study.session;
+      const currentSide = getCurrentSide();
+
+      cardElement.classList.remove("is-flipped", "has-media", "is-layout-top", "is-layout-side");
 
       if (!card) {
         clearElement(cardElement);
         cardElement.textContent = t("study.emptyQueue");
-        progressElement.textContent = "";
-        statsElement.textContent = "";
-        hintElement.textContent = "";
         return;
       }
 
+      const text = getCurrentText(card);
+      const imageUrl = getCurrentImage(card, currentSide);
+      const layout = resolveMediaLayout(currentSide, text, imageUrl);
+
       clearElement(cardElement);
+      cardElement.classList.toggle("is-flipped", ctx.state.study.flipped);
+      cardElement.classList.toggle("has-media", !!imageUrl);
+      cardElement.classList.toggle("is-layout-top", layout === "top");
+      cardElement.classList.toggle("is-layout-side", layout === "side");
 
-      const correctPercent = session.reviewed
-        ? Math.round((session.correct / session.reviewed) * 100)
-        : 0;
+      const content = createElement("div", {
+        className:
+          layout === "side" ? "study-card-content is-side" :
+          layout === "top" ? "study-card-content is-top" :
+          "study-card-content is-text-only"
+      });
 
-      cardElement.appendChild(createElement("div", {
-        className: "study-card-tag",
-        text: t(ctx.state.study.flipped ? "study.answer" : "study.question")
-      }));
-
-      if (ctx.state.study.flipped && card.image) {
-        cardElement.appendChild(createElement("img", {
-          className: "study-card-img",
-          attrs: {
-            src: card.image,
-            alt: card.frontText
-          }
+      if (imageUrl) {
+        content.appendChild(createElement("div", {
+          className: "study-card-media",
+          children: [
+            createElement("img", {
+              className: "study-card-img",
+              attrs: {
+                src: imageUrl,
+                alt: card.frontText || text || "Study image",
+                decoding: "async"
+              }
+            })
+          ]
         }));
       }
 
-      cardElement.appendChild(createElement("div", {
-        className: ctx.state.study.flipped ? "study-back-text" : "study-front-text",
-        text: ctx.state.study.flipped ? card.backText : card.frontText
+      content.appendChild(createElement("div", {
+        className: "study-card-copy",
+        children: [
+          createElement("div", {
+            className: `${ctx.state.study.flipped ? "study-back-text" : "study-front-text"}${imageUrl ? " has-media" : ""}`,
+            text
+          })
+        ]
       }));
 
-      hintElement.textContent = t(ctx.state.study.flipped ? "study.hintBack" : "study.hintFront");
+      cardElement.appendChild(content);
+
       resetLabels();
     }
 
@@ -157,17 +256,12 @@
       resetGlow();
     }
 
-    function handleCardAdvance() {
+    function toggleFlip() {
       if (!ctx.state.study.queue.length) return;
 
-      if (!ctx.state.study.flipped) {
-        ctx.state.study.pendingInterval = getStudyBase(ctx.state.study.queue.length) * 3;
-        ctx.state.study.flipped = true;
-        render();
-        return;
-      }
-
-      answer("unsure", ctx.state.study.pendingInterval ?? getStudyBase(ctx.state.study.queue.length) * 3);
+      ctx.state.study.flipped = !ctx.state.study.flipped;
+      render();
+      resetGlow();
     }
 
     function goBack() {
@@ -194,13 +288,7 @@
       resetGlow();
     }
 
-    cardElement.addEventListener("click", handleCardAdvance);
-    cardElement.addEventListener("keydown", (event) => {
-      if (event.key === " ") {
-        event.preventDefault();
-        handleCardAdvance();
-      }
-    });
+    cardElement.addEventListener("click", toggleFlip);
 
     document.getElementById("wrongZone").addEventListener("click", () => {
       answer("wrong", getStudyBase(ctx.state.study.queue.length));
@@ -221,10 +309,10 @@
       const height = root.innerHeight;
       const edge = 200;
 
-      const left = (1 - clamp(event.clientX / edge, 0, 1)) * 0.85;
-      const right = (1 - clamp((width - event.clientX) / edge, 0, 1)) * 0.85;
-      const bottom = (1 - clamp((height - event.clientY) / edge, 0, 1)) * 0.85;
-      const top = (1 - clamp(event.clientY / edge, 0, 1)) * 0.85;
+      const left = (1 - clamp(event.clientX / edge, 0, 1)) * 1;
+      const right = (1 - clamp((width - event.clientX) / edge, 0, 1)) * 1;
+      const bottom = (1 - clamp((height - event.clientY) / edge, 0, 1)) * 1;
+      const top = (1 - clamp(event.clientY / edge, 0, 1)) * 1;
 
       wrap.style.setProperty("--left-glow", left.toFixed(3));
       wrap.style.setProperty("--right-glow", right.toFixed(3));
@@ -237,6 +325,19 @@
       document.getElementById("backLabel").classList.toggle("visible", top > 0.2);
     });
 
+    root.addEventListener("resize", () => {
+      if (!ctx.router.isVisible("studyScreen")) return;
+
+      if (resizeFrameId !== null) {
+        return;
+      }
+
+      resizeFrameId = root.requestAnimationFrame(() => {
+        resizeFrameId = null;
+        render();
+      });
+    });
+
     root.document.addEventListener("keydown", (event) => {
       if (!ctx.router.isVisible("studyScreen")) return;
 
@@ -244,9 +345,10 @@
       if (tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT") return;
 
       switch (event.key) {
+        case "Enter":
         case " ":
           event.preventDefault();
-          handleCardAdvance();
+          toggleFlip();
           break;
         case "ArrowLeft":
           event.preventDefault();

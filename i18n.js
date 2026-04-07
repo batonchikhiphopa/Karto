@@ -34,8 +34,14 @@
         close: "Close"
       },
       actions: {
+        createCard: "Create card",
         edit: "Edit",
-        delete: "Delete"
+        editCard: "Edit card",
+        mergeDeck: "Merge deck",
+        renameDeck: "Rename deck",
+        importDecks: "Import decks",
+        delete: "Delete",
+        share: "Share"
       },
       counts: {
         cards: {
@@ -49,9 +55,9 @@
       },
       library: {
         title: "Library",
-        subtitle: "Manage decks, exports, and imports.",
-        createDeck: "+ Create deck",
-        createCard: "+ Create card",
+        subtitle: "Decks, import, and sharing.",
+        createDeck: "Create deck",
+        createCard: "Create card",
         merge: "Merge decks",
         exportAll: "Export decks",
         exportCsv: "Export CSV",
@@ -60,9 +66,10 @@
       },
       editDeck: {
         title: "Deck editor",
-        subtitle: "Sort, search, and study cards from one place.",
-        createCard: "+ Create card",
-        addFromOther: "+ Add from another deck",
+        subtitle: "Cards, order, and study.",
+        createCard: "Create card",
+        addFromOther: "Add from another deck",
+        share: "Share deck",
         export: "Export",
         exportCsv: "Export CSV",
         import: "Import",
@@ -81,7 +88,7 @@
       },
       settings: {
         title: "Settings",
-        subtitle: "Choose language, theme, and review recent study sessions.",
+        subtitle: "Language, theme, and history.",
         language: "Interface language",
         reset: "Reset all data",
         languageOptionEn: "English",
@@ -97,30 +104,42 @@
       cardForm: {
         titleCreate: "Create card",
         titleEdit: "Edit card",
-        subtitle: "Build the front and back, then preview before saving.",
+        subtitle: "Front, answer, and image.",
         frontLabel: "Front side",
         frontPlaceholder: "Word or question",
         backLabel: "Back side",
         backPlaceholder: "Definition or answer",
-        imageLabel: "Image (URL)",
+        imageLabel: "Image",
         imagePlaceholder: "Paste a link or choose below",
         deckLabel: "Deck",
-        getDefinition: "Get definition",
+        getDefinition: "Get meaning",
+        translate: "Translate",
         searchImages: "Find images",
         save: "Save card",
         imageSelectTitle: "Click to select",
         dictLang: "Dictionary language",
         dictLangEn: "English",
-        dictLangDe: "Deutsch",
-        dictLangRu: "Русский",
+        dictLangDe: "German",
+        dictLangRu: "Russian",
+        chooseDefinitionSource: "Choose dictionary source",
+        chooseTranslationTarget: "Choose translation language",
+        definitionOptionEn: "EN · dictionaryapi.dev",
+        definitionOptionDe: "DE · DWDS",
+        definitionOptionRu: "RU · Wiktionary",
+        translationOptionEn: "EN",
+        translationOptionDe: "DE",
+        translationOptionRu: "RU",
+        definitionSelection: "{language} · {source}",
+        translationSelection: "Target: {language}",
         uploadImage: "Upload image",
+        imageSideFront: "Show image on the front side",
+        imageSideBack: "Show image on the back side",
         addCard: "Add card",
-        previewTitle: "Live preview",
-        flipPreview: "Flip preview",
         clearImage: "Clear image"
       },
       createDeck: {
         title: "Create deck",
+        subtitle: "Just a name.",
         nameLabel: "Name",
         namePlaceholder: "Deck name",
         save: "Create"
@@ -136,7 +155,7 @@
         title: "Add from another deck",
         subtitle: "Copy cards from one deck into another.",
         sourceDeck: "Source deck",
-        addCard: "+ Add",
+        addCard: "Add",
         empty: "No cards"
       },
       study: {
@@ -171,6 +190,7 @@
         requiredFields: "Fill in the required fields.",
         chooseDeck: "Choose a deck.",
         enterFrontWord: "Enter a word on the front side.",
+        enterBackText: "Enter text on the back side.",
         definitionNotFound: "Definition not found.",
         serverUnavailable: "Server is unavailable. Start `node server.js`.",
         nothingFound: "Nothing found.",
@@ -189,7 +209,11 @@
         cardSaved: "Card saved.",
         invalidImageUrl: "Use an http(s) or data:image URL.",
         noCardsForMode: "No cards match the selected study mode.",
-        deckMerged: "Decks merged into \"{name}\"."
+        deckMerged: "Decks merged into \"{name}\".",
+        deckShared: "Deck shared.",
+        deckJsonCopied: "Deck JSON copied.",
+        shareUnavailable: "Sharing is unavailable here.",
+        translationUnavailable: "Translation is unavailable."
       },
       test: {
         fallbackOnly: "Fallback works"
@@ -216,8 +240,14 @@
         close: "Закрыть"
       },
       actions: {
+        createCard: "Создать карточку",
         edit: "Изменить",
-        delete: "Удалить"
+        editCard: "Изменить карточку",
+        mergeDeck: "Объединить колоду",
+        renameDeck: "Переименовать колоду",
+        importDecks: "Импорт колод",
+        delete: "Удалить",
+        share: "Поделиться"
       },
       counts: {
         cards: {
@@ -233,9 +263,9 @@
       },
       library: {
         title: "Библиотека",
-        subtitle: "Управляй колодами, экспортом и импортом.",
-        createDeck: "+ Создать колоду",
-        createCard: "+ Создать карточку",
+        subtitle: "Колоды, импорт и обмен.",
+        createDeck: "Создать колоду",
+        createCard: "Создать карточку",
         merge: "Объединить колоды",
         exportAll: "Экспорт колод",
         exportCsv: "Экспорт CSV",
@@ -244,9 +274,10 @@
       },
       editDeck: {
         title: "Редактор колоды",
-        subtitle: "Сортируй, ищи и учи карточки в одном месте.",
-        createCard: "+ Создать карточку",
-        addFromOther: "+ Добавить из другой колоды",
+        subtitle: "Карточки, порядок и учёба.",
+        createCard: "Создать карточку",
+        addFromOther: "Добавить из другой колоды",
+        share: "Поделиться колодой",
         export: "Экспорт",
         exportCsv: "Экспорт CSV",
         import: "Импорт",
@@ -265,7 +296,7 @@
       },
       settings: {
         title: "Настройки",
-        subtitle: "Выбери язык, тему и просмотри недавние сессии.",
+        subtitle: "Язык, тема и история.",
         language: "Язык интерфейса",
         reset: "Сбросить все данные",
         languageOptionEn: "English",
@@ -280,31 +311,43 @@
       },
       cardForm: {
         titleCreate: "Создать карточку",
-        titleEdit: "Редактировать карточку",
-        subtitle: "Заполни обе стороны и проверь превью перед сохранением.",
+        titleEdit: "Изменить карточку",
+        subtitle: "Лицевая сторона, ответ и картинка.",
         frontLabel: "Лицевая сторона",
         frontPlaceholder: "Слово или вопрос",
         backLabel: "Обратная сторона",
         backPlaceholder: "Определение или ответ",
-        imageLabel: "Изображение (URL)",
+        imageLabel: "Изображение",
         imagePlaceholder: "Вставь ссылку или выбери ниже",
         deckLabel: "Колода",
-        getDefinition: "Получить определение",
+        getDefinition: "Получить толкование",
+        translate: "Перевести",
         searchImages: "Найти картинки",
         save: "Сохранить карточку",
         imageSelectTitle: "Нажми, чтобы выбрать",
         dictLang: "Язык словаря",
-        dictLangEn: "English",
-        dictLangDe: "Deutsch",
+        dictLangEn: "Английский",
+        dictLangDe: "Немецкий",
         dictLangRu: "Русский",
+        chooseDefinitionSource: "Выбрать источник словаря",
+        chooseTranslationTarget: "Выбрать язык перевода",
+        definitionOptionEn: "EN · dictionaryapi.dev",
+        definitionOptionDe: "DE · DWDS",
+        definitionOptionRu: "RU · Wiktionary",
+        translationOptionEn: "EN",
+        translationOptionDe: "DE",
+        translationOptionRu: "RU",
+        definitionSelection: "{language} · {source}",
+        translationSelection: "Цель: {language}",
         uploadImage: "Загрузить картинку",
+        imageSideFront: "Показывать картинку на лицевой стороне",
+        imageSideBack: "Показывать картинку на обратной стороне",
         addCard: "Добавить карточку",
-        previewTitle: "Живое превью",
-        flipPreview: "Перевернуть превью",
         clearImage: "Очистить изображение"
       },
       createDeck: {
         title: "Создать колоду",
+        subtitle: "Только название.",
         nameLabel: "Название",
         namePlaceholder: "Название колоды",
         save: "Создать"
@@ -320,7 +363,7 @@
         title: "Добавить из другой колоды",
         subtitle: "Скопируй карточки из одной колоды в другую.",
         sourceDeck: "Исходная колода",
-        addCard: "+ Добавить",
+        addCard: "Добавить",
         empty: "Карточек нет"
       },
       study: {
@@ -355,6 +398,7 @@
         requiredFields: "Заполни обязательные поля.",
         chooseDeck: "Выбери колоду.",
         enterFrontWord: "Введи слово на лицевой стороне.",
+        enterBackText: "Введи текст на обратной стороне.",
         definitionNotFound: "Определение не найдено.",
         serverUnavailable: "Сервер недоступен. Запусти `node server.js`.",
         nothingFound: "Ничего не найдено.",
@@ -373,7 +417,11 @@
         cardSaved: "Карточка сохранена.",
         invalidImageUrl: "Используй URL формата http(s) или data:image.",
         noCardsForMode: "Для выбранного режима подходящих карточек нет.",
-        deckMerged: "Колоды объединены в \"{name}\"."
+        deckMerged: "Колоды объединены в \"{name}\".",
+        deckShared: "Колода отправлена.",
+        deckJsonCopied: "JSON колоды скопирован.",
+        shareUnavailable: "Поделиться здесь не получилось.",
+        translationUnavailable: "Перевод недоступен."
       }
     },
     de: {
@@ -397,8 +445,14 @@
         close: "Schließen"
       },
       actions: {
+        createCard: "Karte erstellen",
         edit: "Bearbeiten",
-        delete: "Löschen"
+        editCard: "Karte bearbeiten",
+        mergeDeck: "Deck zusammenführen",
+        renameDeck: "Deck umbenennen",
+        importDecks: "Decks importieren",
+        delete: "Löschen",
+        share: "Teilen"
       },
       counts: {
         cards: {
@@ -412,9 +466,9 @@
       },
       library: {
         title: "Bibliothek",
-        subtitle: "Verwalte Decks, Exporte und Importe.",
-        createDeck: "+ Deck erstellen",
-        createCard: "+ Karte erstellen",
+        subtitle: "Decks, Import und Teilen.",
+        createDeck: "Deck erstellen",
+        createCard: "Karte erstellen",
         merge: "Decks zusammenführen",
         exportAll: "Decks exportieren",
         exportCsv: "CSV exportieren",
@@ -423,9 +477,10 @@
       },
       editDeck: {
         title: "Deck-Editor",
-        subtitle: "Sortiere, suche und lerne Karten an einem Ort.",
-        createCard: "+ Karte erstellen",
-        addFromOther: "+ Aus anderem Deck hinzufügen",
+        subtitle: "Karten, Reihenfolge und Lernen.",
+        createCard: "Karte erstellen",
+        addFromOther: "Aus anderem Deck hinzufügen",
+        share: "Deck teilen",
         export: "Exportieren",
         exportCsv: "CSV exportieren",
         import: "Importieren",
@@ -444,7 +499,7 @@
       },
       settings: {
         title: "Einstellungen",
-        subtitle: "Wähle Sprache, Thema und sieh dir letzte Lernsitzungen an.",
+        subtitle: "Sprache, Thema und Verlauf.",
         language: "Sprache der Oberfläche",
         reset: "Alle Daten zurücksetzen",
         languageOptionEn: "English",
@@ -460,30 +515,42 @@
       cardForm: {
         titleCreate: "Karte erstellen",
         titleEdit: "Karte bearbeiten",
-        subtitle: "Fülle Vorder- und Rückseite aus und prüfe die Vorschau vor dem Speichern.",
+        subtitle: "Vorderseite, Antwort und Bild.",
         frontLabel: "Vorderseite",
         frontPlaceholder: "Wort oder Frage",
         backLabel: "Rückseite",
         backPlaceholder: "Definition oder Antwort",
-        imageLabel: "Bild (URL)",
+        imageLabel: "Bild",
         imagePlaceholder: "Link einfügen oder unten auswählen",
         deckLabel: "Deck",
-        getDefinition: "Definition holen",
+        getDefinition: "Bedeutung holen",
+        translate: "Übersetzen",
         searchImages: "Bilder suchen",
         save: "Karte speichern",
         imageSelectTitle: "Zum Auswählen klicken",
         dictLang: "Wörterbuchsprache",
-        dictLangEn: "English",
+        dictLangEn: "Englisch",
         dictLangDe: "Deutsch",
-        dictLangRu: "Русский",
+        dictLangRu: "Russisch",
+        chooseDefinitionSource: "Wörterbuchquelle wählen",
+        chooseTranslationTarget: "Zielsprache wählen",
+        definitionOptionEn: "EN · dictionaryapi.dev",
+        definitionOptionDe: "DE · DWDS",
+        definitionOptionRu: "RU · Wiktionary",
+        translationOptionEn: "EN",
+        translationOptionDe: "DE",
+        translationOptionRu: "RU",
+        definitionSelection: "{language} · {source}",
+        translationSelection: "Ziel: {language}",
         uploadImage: "Bild hochladen",
+        imageSideFront: "Bild auf der Vorderseite zeigen",
+        imageSideBack: "Bild auf der Rückseite zeigen",
         addCard: "Karte hinzufügen",
-        previewTitle: "Live-Vorschau",
-        flipPreview: "Vorschau drehen",
         clearImage: "Bild entfernen"
       },
       createDeck: {
         title: "Deck erstellen",
+        subtitle: "Nur ein Name.",
         nameLabel: "Name",
         namePlaceholder: "Deckname",
         save: "Erstellen"
@@ -499,7 +566,7 @@
         title: "Aus anderem Deck hinzufügen",
         subtitle: "Kopiere Karten aus einem Deck in ein anderes.",
         sourceDeck: "Quelldeck",
-        addCard: "+ Hinzufügen",
+        addCard: "Hinzufügen",
         empty: "Keine Karten"
       },
       study: {
@@ -534,6 +601,7 @@
         requiredFields: "Fülle die Pflichtfelder aus.",
         chooseDeck: "Wähle ein Deck.",
         enterFrontWord: "Gib ein Wort auf der Vorderseite ein.",
+        enterBackText: "Gib Text auf der Rückseite ein.",
         definitionNotFound: "Definition nicht gefunden.",
         serverUnavailable: "Server ist nicht verfügbar. Starte `node server.js`.",
         nothingFound: "Nichts gefunden.",
@@ -552,7 +620,11 @@
         cardSaved: "Karte gespeichert.",
         invalidImageUrl: "Verwende eine URL mit http(s) oder data:image.",
         noCardsForMode: "Für den gewählten Lernmodus gibt es keine passenden Karten.",
-        deckMerged: "Decks wurden zu \"{name}\" zusammengeführt."
+        deckMerged: "Decks wurden zu \"{name}\" zusammengeführt.",
+        deckShared: "Deck geteilt.",
+        deckJsonCopied: "Deck-JSON kopiert.",
+        shareUnavailable: "Teilen ist hier nicht verfügbar.",
+        translationUnavailable: "Übersetzung ist nicht verfügbar."
       }
     }
   };

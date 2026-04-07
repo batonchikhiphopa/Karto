@@ -1,4 +1,4 @@
-const CACHE_NAME = "karto-v1";
+const CACHE_NAME = "karto-v2";
 const ASSETS = [
   "/",
   "/index.html",

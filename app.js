@@ -20,6 +20,7 @@
     return root.Karto.getPrimaryNavScreen(screenId);
   }
 
+  let ctx;
   let sidebar;
   const router = root.Karto.createRouter({
     screenIds: [
@@ -38,6 +39,14 @@
       state.currentScreenId = screenId;
       api.abortAll();
       applyTranslations(document.getElementById(screenId) || document);
+
+      if (ctx?.homeView) {
+        if (screenId === "homeScreen") {
+          ctx.homeView.activate();
+        } else {
+          ctx.homeView.deactivate();
+        }
+      }
     },
     onNavChange(navTarget) {
       if (sidebar) {
@@ -61,47 +70,73 @@
       .replace(/^-|-$/g, "") || "deck";
   }
 
-  function exportJson(data, filename) {
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json"
-    });
+  async function copyText(text) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
+    const helper = document.createElement("textarea");
+    helper.value = text;
+    helper.setAttribute("readonly", "");
+    helper.style.position = "fixed";
+    helper.style.opacity = "0";
+    document.body.appendChild(helper);
+    helper.select();
+
+    try {
+      return document.execCommand("copy");
+    } finally {
+      helper.remove();
+    }
   }
 
-  function exportCsv(decks, filename) {
-    const rows = [];
+  async function shareDeck(deck) {
+    if (!deck) return false;
 
-    decks.forEach((deck) => {
-      deck.cards.forEach((card) => {
-        rows.push([
-          deck.name,
-          card.frontText,
-          card.backText,
-          card.image || ""
-        ]);
-      });
-    });
+    const payload = createExportPayload([deck]);
+    const json = JSON.stringify(payload, null, 2);
+    const filename = buildDeckExportFilename(deck.name);
+    const file = typeof File === "function"
+      ? new File([json], filename, { type: "application/json" })
+      : null;
 
-    const csv = rows
-      .map((row) => row.map((value) => `"${String(value).replace(/"/g, "\"\"")}"`).join(","))
-      .join("\n");
+    try {
+      if (navigator.share && file) {
+        const shareData = {
+          title: deck.name,
+          files: [file]
+        };
 
-    const blob = new Blob([csv], {
-      type: "text/csv;charset=utf-8"
-    });
+        const canShareFiles = typeof navigator.canShare !== "function" || navigator.canShare({ files: [file] });
+        if (canShareFiles) {
+          await navigator.share(shareData);
+          toast.success(t("alerts.deckShared"));
+          return true;
+        }
+      }
 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
+      if (await copyText(json)) {
+        toast.success(t("alerts.deckJsonCopied"));
+        return true;
+      }
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return false;
+      }
+
+      try {
+        if (await copyText(json)) {
+          toast.success(t("alerts.deckJsonCopied"));
+          return true;
+        }
+      } catch {
+        // Fall through to localized error toast below.
+      }
+    }
+
+    toast.error(t("alerts.shareUnavailable"));
+    return false;
   }
 
   function importJson(callback) {
@@ -213,20 +248,19 @@
     });
   }
 
-  const ctx = {
+  ctx = {
     api,
     cardCount,
     createCardThumbnail,
     createEmptyMessage,
     deleteDeckWithUndo,
-    exportCsv,
-    exportJson,
     getDeckById,
     importJson,
     isValidImageValue,
     navTargetForScreen,
     restoreSnapshot,
     router,
+    shareDeck,
     slugify,
     state,
     store,

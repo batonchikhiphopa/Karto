@@ -1,5 +1,5 @@
 (function(root, factory) {
-  const api = factory();
+  const api = factory(root);
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
@@ -7,7 +7,7 @@
 
   const Karto = root.Karto || (root.Karto = {});
   Object.assign(Karto, api);
-})(typeof window !== "undefined" ? window : globalThis, function() {
+})(typeof window !== "undefined" ? window : globalThis, function(root) {
   function getPrimaryNavScreen(screenId) {
     if (screenId === "homeScreen") return "homeScreen";
     if (screenId === "settingsScreen") return "settingsScreen";

@@ -6,13 +6,118 @@
     const createDeckInput = document.getElementById("newDeckNameInput");
     const mergeList = document.getElementById("mergeCheckboxList");
     const mergeNameInput = document.getElementById("mergeNewNameInput");
+    let editingDeckNameId = null;
+
+    function persistDeckRename(deck, nextName, options = {}) {
+      const trimmedName = nextName.trim();
+      if (!trimmedName) {
+        if (options.force) {
+          ctx.toast.error(t("alerts.enterName"));
+        }
+        return false;
+      }
+
+      if (deck.name === trimmedName) {
+        return true;
+      }
+
+      deck.name = trimmedName;
+      ctx.store.saveDecksSoon();
+      ctx.homeView.render();
+      ctx.toast.success(t("alerts.deckNameSaved"));
+      return true;
+    }
+
+    function beginRename(deckId) {
+      editingDeckNameId = deckId;
+      render();
+    }
+
+    function cancelRename() {
+      if (editingDeckNameId === null) return;
+      editingDeckNameId = null;
+      render();
+    }
+
+    function commitRename(deckId, value, options = {}) {
+      const deck = ctx.getDeckById(deckId);
+      if (!deck) {
+        editingDeckNameId = null;
+        render();
+        return;
+      }
+
+      if (!value.trim()) {
+        if (options.force) {
+          ctx.toast.error(t("alerts.enterName"));
+          return;
+        }
+
+        editingDeckNameId = null;
+        render();
+        return;
+      }
+
+      const didPersist = persistDeckRename(deck, value, options);
+      if (!didPersist) {
+        return;
+      }
+
+      editingDeckNameId = null;
+      render();
+    }
+
+    function createDeckNameControl(deck) {
+      if (editingDeckNameId === deck.id) {
+        return createElement("input", {
+          className: "form-input lib-deck-row-name-input",
+          value: deck.name,
+          attrs: {
+            type: "text",
+            "data-rename-input": deck.id,
+            "aria-label": t("actions.renameDeck")
+          },
+          listeners: {
+            click(event) {
+              event.stopPropagation();
+            },
+            keydown(event) {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commitRename(deck.id, event.currentTarget.value, { force: true });
+              }
+
+              if (event.key === "Escape") {
+                event.preventDefault();
+                cancelRename();
+              }
+            },
+            blur(event) {
+              commitRename(deck.id, event.currentTarget.value);
+            }
+          }
+        });
+      }
+
+      return createElement("button", {
+        className: "lib-deck-row-name-btn",
+        text: deck.name,
+        attrs: {
+          type: "button",
+          "data-action": "rename",
+          "data-deck-id": deck.id,
+          "aria-label": t("actions.renameDeck"),
+          title: t("actions.renameDeck")
+        }
+      });
+    }
 
     function createLibraryRow(deck) {
       return createElement("div", {
         className: "lib-deck-row",
         dataset: { deckId: deck.id },
         children: [
-          createElement("div", { className: "lib-deck-row-name", text: deck.name }),
+          createDeckNameControl(deck),
           createElement("div", {
             className: "lib-deck-row-count",
             text: ctx.cardCount(deck.cards.length)
@@ -21,21 +126,58 @@
             className: "lib-deck-row-actions",
             children: [
               createElement("button", {
-                className: "lib-btn",
-                text: t("actions.edit"),
+                className: "icon-btn icon-btn-accent",
+                children: [createElement("span", { text: "+", attrs: { "aria-hidden": "true" } })],
                 attrs: {
                   type: "button",
-                  "data-action": "edit",
-                  "data-deck-id": deck.id
+                  "data-action": "create-card",
+                  "data-deck-id": deck.id,
+                  "aria-label": t("actions.createCard"),
+                  title: t("actions.createCard")
                 }
               }),
               createElement("button", {
-                className: "lib-btn lib-btn-danger",
-                text: t("actions.delete"),
+                className: "icon-btn",
+                children: [createElement("span", { text: "✎", attrs: { "aria-hidden": "true" } })],
+                attrs: {
+                  type: "button",
+                  "data-action": "edit",
+                  "data-deck-id": deck.id,
+                  "aria-label": t("actions.edit"),
+                  title: t("actions.edit")
+                }
+              }),
+              createElement("button", {
+                className: "icon-btn",
+                children: [createElement("span", { text: "⇄", attrs: { "aria-hidden": "true" } })],
+                attrs: {
+                  type: "button",
+                  "data-action": "merge",
+                  "data-deck-id": deck.id,
+                  "aria-label": t("actions.mergeDeck"),
+                  title: t("actions.mergeDeck")
+                }
+              }),
+              createElement("button", {
+                className: "icon-btn",
+                children: [createElement("span", { text: "⤴", attrs: { "aria-hidden": "true" } })],
+                attrs: {
+                  type: "button",
+                  "data-action": "share",
+                  "data-deck-id": deck.id,
+                  "aria-label": t("actions.share"),
+                  title: t("actions.share")
+                }
+              }),
+              createElement("button", {
+                className: "icon-btn icon-btn-danger",
+                children: [createElement("span", { text: "✕", attrs: { "aria-hidden": "true" } })],
                 attrs: {
                   type: "button",
                   "data-action": "delete",
-                  "data-deck-id": deck.id
+                  "data-deck-id": deck.id,
+                  "aria-label": t("actions.delete"),
+                  title: t("actions.delete")
                 }
               })
             ]
@@ -55,6 +197,15 @@
       ctx.state.decks.forEach((deck) => {
         list.appendChild(createLibraryRow(deck));
       });
+
+      if (editingDeckNameId !== null) {
+        root.requestAnimationFrame(() => {
+          const input = list.querySelector(`[data-rename-input="${editingDeckNameId}"]`);
+          if (!input) return;
+          input.focus();
+          input.select();
+        });
+      }
     }
 
     function openCreateDeck(returnScreen) {
@@ -71,12 +222,13 @@
         return;
       }
 
-      ctx.state.decks.push(createDeck(name));
+      const deck = createDeck(name);
+      ctx.state.decks.push(deck);
       ctx.store.saveDecksSoon();
       ctx.homeView.render();
       render();
       ctx.toast.success(t("alerts.deckCreated"));
-      ctx.router.goTo(ctx.state.createDeckReturn, ctx.navTargetForScreen(ctx.state.createDeckReturn));
+      ctx.deckEditorView.open(deck.id);
     }
 
     function renderMergeOptions(selectedDeckIds = []) {
@@ -108,13 +260,13 @@
       });
     }
 
-    function openMerge() {
+    function openMerge(selectedDeckIds = []) {
       if (ctx.state.decks.length < 2) {
         ctx.toast.error(t("alerts.needTwoDecks"));
         return;
       }
 
-      renderMergeOptions();
+      renderMergeOptions(selectedDeckIds);
       mergeNameInput.value = "";
       ctx.router.goTo("mergeDecksScreen", "libraryScreen");
     }
@@ -153,8 +305,24 @@
 
       const deckId = button.dataset.deckId;
 
+      if (button.dataset.action === "rename") {
+        beginRename(deckId);
+      }
+
+      if (button.dataset.action === "create-card") {
+        ctx.cardFormView.open(deckId, null, "libraryScreen");
+      }
+
       if (button.dataset.action === "edit") {
         ctx.deckEditorView.open(deckId);
+      }
+
+      if (button.dataset.action === "merge") {
+        openMerge([deckId]);
+      }
+
+      if (button.dataset.action === "share") {
+        ctx.shareDeck(ctx.getDeckById(deckId));
       }
 
       if (button.dataset.action === "delete") {
@@ -162,26 +330,7 @@
       }
     });
 
-    document.getElementById("libCreateDeckBtn").addEventListener("click", () => openCreateDeck("libraryScreen"));
-    document.getElementById("libCreateCardBtn").addEventListener("click", () => ctx.cardFormView.open(null, null, "libraryScreen"));
-    document.getElementById("libMergeBtn").addEventListener("click", openMerge);
-    document.getElementById("libExportBtn").addEventListener("click", () => {
-      if (ctx.state.decks.length === 0) {
-        ctx.toast.error(t("alerts.noDecksExport"));
-        return;
-      }
-
-      ctx.exportJson(createExportPayload(ctx.state.decks), buildLibraryExportFilename());
-    });
-    document.getElementById("libCsvExportBtn").addEventListener("click", () => {
-      if (ctx.state.decks.length === 0) {
-        ctx.toast.error(t("alerts.noDecksExport"));
-        return;
-      }
-
-      ctx.exportCsv(ctx.state.decks, "karto-decks.csv");
-    });
-    document.getElementById("libImportBtn").addEventListener("click", () => {
+    document.getElementById("libraryImportBtn").addEventListener("click", () => {
       ctx.importJson((rawPayload) => {
         const result = prepareLibraryImport(rawPayload, ctx.state.decks);
         if (!result.isValid) {
@@ -201,7 +350,7 @@
     });
 
     document.getElementById("saveDeckBtn").addEventListener("click", saveDeck);
-    document.getElementById("backFromCreateDeckBtn").addEventListener("click", () => {
+    document.getElementById("closeCreateDeckBtn").addEventListener("click", () => {
       ctx.router.goTo(ctx.state.createDeckReturn, ctx.navTargetForScreen(ctx.state.createDeckReturn));
     });
     createDeckInput.addEventListener("keydown", (event) => {
@@ -210,7 +359,7 @@
       }
     });
 
-    document.getElementById("backFromMergeBtn").addEventListener("click", () => {
+    document.getElementById("closeMergeBtn").addEventListener("click", () => {
       ctx.router.goTo("libraryScreen", "libraryScreen");
     });
     document.getElementById("confirmMergeBtn").addEventListener("click", confirmMerge);

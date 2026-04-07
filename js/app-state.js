@@ -63,7 +63,8 @@
         returnScreen: "libraryScreen",
         editDeckId: null,
         editCardId: null,
-        previewFace: "front"
+        imageSide: "back",
+        imageTargetSide: "back"
       },
       studyMode: "all",
       study: root.createStudyState({ cards: [] }),
@@ -177,7 +178,8 @@
       state.selectedCardIds = [];
       state.cardForm.editDeckId = null;
       state.cardForm.editCardId = null;
-      state.cardForm.previewFace = "front";
+      state.cardForm.imageSide = "back";
+      state.cardForm.imageTargetSide = "back";
       state.studyMode = "all";
       state.study = root.createStudyState({ cards: [] });
       state.studyProgress = {};

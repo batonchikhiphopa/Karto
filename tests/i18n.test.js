@@ -46,8 +46,21 @@ function testFallbackToEnglishWorks() {
   assert.equal(t("test.fallbackOnly"), "Fallback works");
 }
 
+function testNewUiStringsAreLocalized() {
+  setLanguage("ru", {
+    persist: false,
+    refresh: false,
+    storage: memoryStorage
+  });
+
+  assert.equal(t("actions.share"), "Поделиться");
+  assert.equal(t("cardForm.subtitle"), "Лицевая сторона, ответ и картинка.");
+  assert.equal(t("cardForm.searchImages"), "Найти картинки");
+}
+
 testTranslatePluralUsesLanguageRules();
 testInterpolationReplacesParams();
 testFallbackToEnglishWorks();
+testNewUiStringsAreLocalized();
 
 console.log("i18n tests passed");

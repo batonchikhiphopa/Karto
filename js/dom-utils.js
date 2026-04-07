@@ -1,12 +1,12 @@
 (function(root, factory) {
-  const api = factory();
+  const api = factory(root);
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
 
   Object.assign(root, api);
-})(typeof window !== "undefined" ? window : globalThis, function() {
+})(typeof window !== "undefined" ? window : globalThis, function(root) {
   function appendChildren(parent, children) {
     children
       .flat()

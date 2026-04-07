@@ -113,14 +113,14 @@
                 }
               }),
               createElement("button", {
-                className: "icon-btn",
+                className: "icon-btn icon-btn-accent",
                 children: [createElement("span", { text: "✎", attrs: { "aria-hidden": "true" } })],
                 attrs: {
                   type: "button",
                   "data-action": "edit-card",
                   "data-card-id": card.id,
-                  "aria-label": t("actions.edit"),
-                  title: t("actions.edit")
+                  "aria-label": t("actions.editCard"),
+                  title: t("actions.editCard")
                 }
               }),
               createElement("button", {
@@ -439,7 +439,7 @@
       }
     });
 
-    document.getElementById("backFromEditDeckBtn").addEventListener("click", () => {
+    document.getElementById("closeEditDeckBtn").addEventListener("click", () => {
       ctx.libraryView.render();
       ctx.router.goTo("libraryScreen", "libraryScreen");
     });
@@ -449,15 +449,10 @@
     document.getElementById("editDeckAddFromOtherBtn").addEventListener("click", () => {
       openAddFromOther(ctx.state.editingDeckId);
     });
-    document.getElementById("editDeckExportBtn").addEventListener("click", () => {
+    document.getElementById("editDeckShareBtn").addEventListener("click", () => {
       const deck = getDeck();
       if (!deck) return;
-      ctx.exportJson(createExportPayload([deck]), buildDeckExportFilename(deck.name));
-    });
-    document.getElementById("editDeckExportCsvBtn").addEventListener("click", () => {
-      const deck = getDeck();
-      if (!deck) return;
-      ctx.exportCsv([deck], `karto-${ctx.slugify(deck.name)}.csv`);
+      ctx.shareDeck(deck);
     });
     document.getElementById("editDeckImportBtn").addEventListener("click", () => {
       const deck = getDeck();
@@ -503,7 +498,7 @@
       if (!button) return;
       copyFromOtherDeck(button.dataset.cardId);
     });
-    document.getElementById("backFromAddOtherBtn").addEventListener("click", () => {
+    document.getElementById("closeAddOtherBtn").addEventListener("click", () => {
       render();
       ctx.router.goTo("editDeckScreen", "libraryScreen");
     });

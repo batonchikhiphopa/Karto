@@ -1,12 +1,12 @@
 (function(root, factory) {
-  const api = factory();
+  const api = factory(root);
 
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
 
   Object.assign(root, api);
-})(typeof window !== "undefined" ? window : globalThis, function() {
+})(typeof window !== "undefined" ? window : globalThis, function(root) {
   const DATA_SCHEMA_VERSION = 2;
   let idCounter = 0;
 
@@ -26,6 +26,10 @@
 
   function normalizeText(value) {
     return typeof value === "string" ? value.trim() : "";
+  }
+
+  function normalizeImageSide(value) {
+    return value === "front" ? "front" : "back";
   }
 
   function hasStableId(value) {
@@ -49,6 +53,7 @@
     const frontText = normalizeText(rawCard.frontText);
     const backText = normalizeText(rawCard.backText);
     const image = normalizeText(rawCard.image);
+    const imageSide = normalizeImageSide(rawCard.imageSide);
 
     if (!frontText || !backText) {
       return null;
@@ -58,12 +63,13 @@
       id: hasStableId(rawCard.id) ? rawCard.id.trim() : createId("card"),
       frontText,
       backText,
-      image
+      image,
+      imageSide
     };
   }
 
   function cardFingerprint(card) {
-    return [card.frontText, card.backText, card.image]
+    return [card.frontText, card.backText, card.image, card.imageSide]
       .map((value) => normalizeText(value).toLowerCase())
       .join("\u241f");
   }
@@ -176,7 +182,8 @@
       id: options.freshId ? createId("card") : normalized.id,
       frontText: normalized.frontText,
       backText: normalized.backText,
-      image: normalized.image
+      image: normalized.image,
+      imageSide: normalized.imageSide
     };
   }
 
@@ -206,7 +213,8 @@
       id: existingId,
       frontText: fields.frontText,
       backText: fields.backText,
-      image: fields.image
+      image: fields.image,
+      imageSide: fields.imageSide
     });
   }
 
