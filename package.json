@@ -1,5 +1,9 @@
 {
   "name": "karto",
+  "version": "1.1.0",
+  "description": "A local-first vanilla JS flashcard app.",
+  "author": "batonchikhiphopa",
+
   "private": true,
   "scripts": {
     "start": "node server.js",
