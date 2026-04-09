@@ -18,7 +18,6 @@ const APP_ROOT = app.getAppPath();
 const APP_ICON_PATH = path.join(APP_ROOT, "logo.svg");
 const HOST = "127.0.0.1";
 const PORT = 3000;
-const BASE_ORIGIN = `http://${HOST}:${PORT}`;
 const WINDOW_MIN_WIDTH = 600;
 const WINDOW_MIN_HEIGHT = 500;
 const DEFAULT_WINDOW_BOUNDS = Object.freeze({
@@ -53,7 +52,7 @@ let startupMetrics = null;
 let startupFailurePromise = null;
 let dataRepository = null;
 
-async function clearDesktopFrontendCaches() {
+async function clearDesktopFrontendCaches(origin = null) {
   if (desktopFrontendCacheCleanupPromise) {
     return desktopFrontendCacheCleanupPromise;
   }
@@ -67,10 +66,12 @@ async function clearDesktopFrontendCaches() {
 
     try {
       await targetSession.clearCache();
-      await targetSession.clearStorageData({
-        origin: BASE_ORIGIN,
-        storages: ["serviceworkers", "cachestorage"]
-      });
+      if (origin) {
+        await targetSession.clearStorageData({
+          origin,
+          storages: ["serviceworkers", "cachestorage"]
+        });
+      }
     } catch (error) {
       console.error("[karto] Failed to clear desktop frontend caches:", error);
     }
@@ -831,7 +832,8 @@ async function ensureServerStarted() {
     server = createServer({
       host: HOST,
       port: PORT,
-      staticRoot: APP_ROOT
+      staticRoot: APP_ROOT,
+      fallbackToAvailablePort: true
     });
   }
 
@@ -868,7 +870,7 @@ async function openMainWindow() {
     const url = await ensureServerStarted();
     recordStartupCheckpoint("server_ready");
 
-    await clearDesktopFrontendCaches();
+    await clearDesktopFrontendCaches(url);
     recordStartupCheckpoint("cache_cleared");
 
     const window = createAppWindow();

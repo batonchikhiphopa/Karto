@@ -1,76 +1,77 @@
 # Karto → Desktop .exe (Electron)
 
-## Что куда положить
+## What goes where
 
-Скопируйте эти файлы в **корень** вашего проекта Karto (рядом с `server.js`, `app.js` и т.д.):
+Copy these files to the **root** of your Karto project (next to `server.js`, `app.js`, etc.):
 
 ```
 karto/
-├── main.js          ← новый файл (Electron точка входа)
-├── package.json     ← заменить существующий
-├── server.js        ← одна правка (см. ниже)
-└── ... (всё остальное без изменений)
+├── main.js ← new file (Electron entry point)
+├── package.json ← replace existing
+├── server.js ← one edit (see below)
+└── ... (everything else unchanged)
 ```
 
 ---
 
-## Правки в коде
+## Code changes
 
-Текущая desktop-версия уже использует встроенный HTTP-сервер:
+The current desktop version already uses the built-in HTTP server:
 
-- `main.js` поднимает сервер через `require("./server")` и `await server.start()`
-- `server.js` экспортирует `createServer()` и `createApp()`
-- отдельный `spawn("node", ["server.js"])` больше не используется
+- `main.js` starts the server via `require("./server")` and `await server.start()`
+- `server.js` exports `createServer()` and `createApp()`
+- separate `spawn("node", ["server.js"])` is no longer used
 
 ---
 
-## Одна команда — установка и сборка
+## One command - install and build
 
 ```bash
 npm install && npm run build:win
 ```
 
-Готовый установщик появится в папке `dist/`.  
-Файл будет называться примерно `Karto Setup 1.0.0.exe`.
+The finished installer will appear in the `dist/` folder.
+
+The file will be named something like `Karto Setup 1.0.0.exe`.
 
 ---
 
-## Команды
+##Commands
 
-| Команда | Что делает |
+| Command | What does it do |
 |---|---|
-| `npm install` | Устанавливает все зависимости включая Electron |
-| `npm start` | Запускает десктопное приложение (для разработки) |
-| `npm run build:win` | Собирает `.exe` установщик для Windows |
-| `npm run build:mac` | Собирает `.dmg` для macOS |
-| `npm run build:linux` | Собирает `.AppImage` для Linux |
-| `npm test` | Запускает тесты (как раньше) |
-| `npm run dev-server` | Запускает только сервер (как раньше `npm start`) |
+| `npm install` | Installs all dependencies, including Electron |
+| `npm start` | Runs the desktop application (for development) |
+| `npm run build:win` | Builds an `.exe` installer for Windows |
+| `npm run build:mac` | Builds a `.dmg` for macOS |
+| `npm run build:linux` | Builds `.AppImage` for Linux |
+| `npm test` | Run tests (as before) |
+| `npm run dev-server` | Starts only the server (as before `npm start`) |
 
 ---
 
-## Как это работает
+## How it works
 
 ```
 Electron (main.js)
-    │
-    ├─ createServer(...)              ← встроенный Express/HTTP сервер стартует в том же процессе
-    │
-    └─ BrowserWindow.loadURL(...)     ← окно показывает фронтенд через локальный URL
+│
+├─ createServer(...) ← The built-in Express/HTTP server starts in the same process
+│
+└─ BrowserWindow.loadURL(...) ← The window displays the frontend via a local URL
 ```
 
-При закрытии приложения Electron вызывает `await server.stop()`, поэтому локальный порт освобождается без отдельного дочернего процесса.
+When the application closes, Electron calls `await server.stop()`, so the local port is released without creating a separate child process.
 
 ---
 
-## Заметки
+##Notes
 
-- **Файл `.env`** в desktop-версии ищется в нескольких местах.
-  Порядок такой: явный `envPath`, `KARTO_ENV_PATH`, `PORTABLE_EXECUTABLE_DIR\\.env`,
-  `.env` рядом с `process.execPath`, `.env` в `process.cwd()`, затем `.env` рядом с `server.js`.
-  Для portable-сборки кладите `.env` рядом с исходным portable `.exe`.
-  Для unpacked или установленной сборки кладите `.env` рядом с `Karto.exe`.
-  Системные переменные окружения тоже поддерживаются и имеют приоритет.
-- **localStorage** хранится в системной папке данных приложения (не рядом с `.exe`).
-  На Windows это `%APPDATA%\Karto`.
-- Сборка требует около 200–300 МБ — Electron включает в себя Chromium и Node.js.
+- **The `.env`** file is searched in several places in the desktop version.
+The order is: explicit `envPath`, `KARTO_ENV_PATH`, `PORTABLE_EXECUTABLE_DIR\\.env`,
+`.env` next to `process.execPath`, `.env` in `process.cwd()`, then `.env` next to `server.js`.
+For a portable build, put `.env` next to the original portable `.exe`.
+For an unpacked or installed build, put `.env` next to `Karto.exe`.
+System environment variables are also supported and take precedence.
+- **localStorage** is stored in the system application data folder (not next to `.exe`).
+On Windows, this is `%APPDATA%\Karto`.
+- The build requires about 200–300 MB — Electron includes Chromium and Node.js.

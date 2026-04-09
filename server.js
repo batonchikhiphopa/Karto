@@ -210,6 +210,13 @@ function extractDefinitionFromDictionaryApi(data) {
   return "";
 }
 
+function normalizeDefinitionText(value) {
+  return String(value || "")
+    .replace(/\[\d+\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function fetchDefinitionFromDictionaryApi(fetchImpl, word, dictLang) {
   const response = await fetchImpl(
     `https://api.dictionaryapi.dev/api/v2/entries/${dictLang}/${encodeURIComponent(word)}`
@@ -228,10 +235,41 @@ async function fetchDefinitionFromDictionaryApi(fetchImpl, word, dictLang) {
 
   return definition
     ? {
-      definition,
+      definition: normalizeDefinitionText(definition),
       dictLang,
       sourceId: "dictionaryapi",
       sourceLabel: "dictionaryapi.dev"
+    }
+    : { notFound: true };
+}
+
+async function fetchDefinitionEnWiktionary(fetchImpl, word) {
+  const response = await fetchImpl(`https://en.wiktionary.org/wiki/${encodeURIComponent(word)}`, {
+    headers: { "User-Agent": USER_AGENT }
+  });
+
+  if (response.status === 404) {
+    return { notFound: true };
+  }
+
+  if (!response.ok) {
+    return { upstreamError: true };
+  }
+
+  const html = await response.text();
+  const $ = cheerio.load(html);
+
+  const definition = normalizeDefinitionText(
+    $('.senseid[data-lang="en"]').filter((_, el) => $(el).text().trim()).first().text() ||
+    $("#English").parent().nextAll("ol").first().find("li").first().text()
+  );
+
+  return definition
+    ? {
+      definition,
+      dictLang: "en",
+      sourceId: "wiktionary",
+      sourceLabel: "Wiktionary"
     }
     : { notFound: true };
 }
@@ -252,10 +290,11 @@ async function fetchDefinitionDe(fetchImpl, word) {
   const html = await response.text();
   const $ = cheerio.load(html);
 
-  const definition =
+  const definition = normalizeDefinitionText(
     $(".dwdswb-definition").first().text().trim() ||
     $(".dwdswb-paraphrase").first().text().trim() ||
-    $(".dwdswb-lesart").first().text().trim();
+    $(".dwdswb-lesart").first().text().trim()
+  );
 
   return definition
     ? {
@@ -263,6 +302,41 @@ async function fetchDefinitionDe(fetchImpl, word) {
       dictLang: "de",
       sourceId: "dwds",
       sourceLabel: "DWDS"
+    }
+    : { notFound: true };
+}
+
+async function fetchDefinitionDeWiktionary(fetchImpl, word) {
+  const response = await fetchImpl(`https://de.wiktionary.org/wiki/${encodeURIComponent(word)}`, {
+    headers: { "User-Agent": USER_AGENT }
+  });
+
+  if (response.status === 404) {
+    return { notFound: true };
+  }
+
+  if (!response.ok) {
+    return { upstreamError: true };
+  }
+
+  const html = await response.text();
+  const $ = cheerio.load(html);
+
+  const definition = normalizeDefinitionText(
+    $('p[title*="Semantik"]').next("dl").find("dd").first().text() ||
+    $(".mw-parser-output p").filter((_, el) => $(el).text().trim() === "Bedeutungen:").first()
+      .next("dl")
+      .find("dd")
+      .first()
+      .text()
+  );
+
+  return definition
+    ? {
+      definition,
+      dictLang: "de",
+      sourceId: "wiktionary",
+      sourceLabel: "Wiktionary"
     }
     : { notFound: true };
 }
@@ -308,14 +382,34 @@ async function fetchDefinitionRu(fetchImpl, word) {
 
 async function resolveDefinition(fetchImpl, word, dictLang) {
   if (dictLang === "de") {
-    return fetchDefinitionDe(fetchImpl, word);
+    const primary = await fetchDefinitionDe(fetchImpl, word);
+    if (primary.definition) {
+      return primary;
+    }
+
+    const fallback = await fetchDefinitionDeWiktionary(fetchImpl, word);
+    if (fallback.definition || (primary.notFound && fallback.notFound)) {
+      return fallback.definition ? fallback : { notFound: true };
+    }
+
+    return primary.upstreamError || fallback.upstreamError ? { upstreamError: true } : { notFound: true };
   }
 
   if (dictLang === "ru") {
     return fetchDefinitionRu(fetchImpl, word);
   }
 
-  return fetchDefinitionFromDictionaryApi(fetchImpl, word, "en");
+  const primary = await fetchDefinitionFromDictionaryApi(fetchImpl, word, "en");
+  if (primary.definition) {
+    return primary;
+  }
+
+  const fallback = await fetchDefinitionEnWiktionary(fetchImpl, word);
+  if (fallback.definition || (primary.notFound && fallback.notFound)) {
+    return fallback.definition ? fallback : { notFound: true };
+  }
+
+  return primary.upstreamError || fallback.upstreamError ? { upstreamError: true } : { notFound: true };
 }
 
 function mapDeepLTargetLang(targetLang) {
@@ -621,6 +715,7 @@ function createServer(options = {}) {
   const host = options.host || process.env.HOST || DEFAULT_HOST;
   const requestedPort = options.port ?? process.env.PORT ?? DEFAULT_PORT;
   const port = Number.isFinite(Number(requestedPort)) ? Number(requestedPort) : DEFAULT_PORT;
+  const fallbackToAvailablePort = options.fallbackToAvailablePort === true;
   const { app, definitionCache } = createApp(options);
 
   let httpServer = null;
@@ -645,40 +740,59 @@ function createServer(options = {}) {
       return startPromise;
     }
 
-    const serverInstance = http.createServer(app);
-    httpServer = serverInstance;
+    const listen = (listenPort) => {
+      const serverInstance = http.createServer(app);
+      httpServer = serverInstance;
 
-    startPromise = new Promise((resolve, reject) => {
-      const handleError = (error) => {
-        serverInstance.off("listening", handleListening);
+      return new Promise((resolve, reject) => {
+        const handleError = (error) => {
+          serverInstance.off("listening", handleListening);
 
-        if (httpServer === serverInstance) {
+          if (httpServer === serverInstance) {
+            httpServer = null;
+          }
+
+          reject(error);
+        };
+
+        const handleListening = () => {
+          serverInstance.off("error", handleError);
+
+          const address = serverInstance.address();
+          const activePort =
+            typeof address === "object" && address && typeof address.port === "number"
+              ? address.port
+              : listenPort;
+
+          resolvedUrl = `http://${host}:${activePort}`;
+          resolve(resolvedUrl);
+        };
+
+        serverInstance.once("error", handleError);
+        serverInstance.once("listening", handleListening);
+        serverInstance.listen(listenPort, host);
+      });
+    };
+
+    startPromise = listen(port)
+      .catch((error) => {
+        if (!fallbackToAvailablePort || error?.code !== "EADDRINUSE" || port === 0) {
+          throw error;
+        }
+
+        return listen(0);
+      })
+      .catch((error) => {
+        if (httpServer?.listening === false || httpServer === null) {
           httpServer = null;
         }
 
         resolvedUrl = "";
+        throw error;
+      })
+      .finally(() => {
         startPromise = null;
-        reject(error);
-      };
-
-      const handleListening = () => {
-        serverInstance.off("error", handleError);
-
-        const address = serverInstance.address();
-        const activePort =
-          typeof address === "object" && address && typeof address.port === "number"
-            ? address.port
-            : port;
-
-        resolvedUrl = `http://${host}:${activePort}`;
-        startPromise = null;
-        resolve(resolvedUrl);
-      };
-
-      serverInstance.once("error", handleError);
-      serverInstance.once("listening", handleListening);
-      serverInstance.listen(port, host);
-    });
+      });
 
     return startPromise;
   }

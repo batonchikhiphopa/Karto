@@ -5,7 +5,7 @@ const path = require("node:path");
 const { once } = require("node:events");
 const cheerio = require("cheerio");
 
-const { collectEnvCandidatePaths, createApp } = require("../server.js");
+const { collectEnvCandidatePaths, createApp, createServer } = require("../server.js");
 const { SHELL_MARKERS } = require("../js/startup-verification.js");
 
 async function withServer(options, run) {
@@ -467,6 +467,110 @@ async function testRateLimiting() {
   });
 }
 
+async function testEnglishDefinitionFallsBackToWiktionary() {
+  await withServer({
+    fetchImpl: async (url) => {
+      if (String(url).includes("api.dictionaryapi.dev")) {
+        return new Response("upstream failed", {
+          status: 503,
+          headers: { "Content-Type": "text/plain" }
+        });
+      }
+
+      if (String(url).includes("en.wiktionary.org")) {
+        return new Response(`
+          <div class="mw-parser-output">
+            <ol>
+              <li class="senseid" data-lang="en">A domesticated feline kept as a pet.</li>
+            </ol>
+          </div>
+        `, {
+          status: 200,
+          headers: { "Content-Type": "text/html" }
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    }
+  }, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/define?word=cat&dictLang=en&lang=en`);
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.definition, "A domesticated feline kept as a pet.");
+    assert.equal(payload.sourceLabel, "Wiktionary");
+  });
+}
+
+async function testGermanDefinitionFallsBackToWiktionary() {
+  await withServer({
+    fetchImpl: async (url) => {
+      if (String(url).includes("dwds.de")) {
+        return new Response("upstream failed", {
+          status: 503,
+          headers: { "Content-Type": "text/plain" }
+        });
+      }
+
+      if (String(url).includes("de.wiktionary.org")) {
+        return new Response(`
+          <div class="mw-parser-output">
+            <p title="Sinn und Bezeichnetes (Semantik)">Bedeutungen:</p>
+            <dl>
+              <dd>[1] Ein Gebaeude zum Wohnen.</dd>
+            </dl>
+          </div>
+        `, {
+          status: 200,
+          headers: { "Content-Type": "text/html" }
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    }
+  }, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/define?word=Haus&dictLang=de&lang=de`);
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.definition, "Ein Gebaeude zum Wohnen.");
+    assert.equal(payload.sourceLabel, "Wiktionary");
+  });
+}
+
+async function testPortFallbackWhenRequestedPortIsBusy() {
+  const occupiedServer = createApp({
+    staticRoot: path.resolve(__dirname, "..")
+  }).app.listen(0, "127.0.0.1");
+
+  await once(occupiedServer, "listening");
+  const occupiedPort = occupiedServer.address().port;
+
+  const fallbackServer = createServer({
+    host: "127.0.0.1",
+    port: occupiedPort,
+    staticRoot: path.resolve(__dirname, ".."),
+    fallbackToAvailablePort: true
+  });
+
+  try {
+    const baseUrl = await fallbackServer.start();
+    const fallbackPort = Number(new URL(baseUrl).port);
+
+    assert.notEqual(fallbackPort, occupiedPort);
+
+    const response = await fetch(`${baseUrl}/api/health`);
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.status, "ok");
+  } finally {
+    await fallbackServer.stop();
+    occupiedServer.close();
+    await once(occupiedServer, "close");
+  }
+}
+
 (async () => {
   await testAppShellHeaders();
   await testAppShellContract();
@@ -477,9 +581,12 @@ async function testRateLimiting() {
   await testDictionaryCaching();
   await testGermanDictionaryRoute();
   await testRussianWiktionaryRoute();
+  await testEnglishDefinitionFallsBackToWiktionary();
+  await testGermanDefinitionFallsBackToWiktionary();
   await testTranslateRoute();
   await testTranslateRequiresConfig();
   await testRateLimiting();
+  await testPortFallbackWhenRequestedPortIsBusy();
   await testEnvPathLoadsApiKeys();
   await testExplicitOptionsOverrideEnvFile();
   testEnvCandidatePriority();

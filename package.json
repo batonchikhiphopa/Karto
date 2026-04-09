@@ -1,7 +1,7 @@
 {
   "name": "karto",
-  "version": "1.2.0",
-  "description": "A local-first vanilla JS flashcard app.",
+  "version": "1.2.1",
+  "description": "A flashcard application for efficient learning and memorization.",
   "author": "batonchikhiphopa",
   "private": true,
   "main": "main.js",
