@@ -98,6 +98,22 @@
       return frontInput.value.trim();
     }
 
+    function optimizeUnsplashUrl(url) {
+      if (!url || !url.includes("images.unsplash.com")) {
+        return url;
+      }
+
+      try {
+        const parsed = new URL(url);
+        parsed.searchParams.set("w", "1200");
+        parsed.searchParams.set("q", "80");
+        parsed.searchParams.set("fm", "webp");
+        return parsed.toString();
+      } catch {
+        return url;
+      }
+    }
+
     function showImagePreview(src) {
       imagePreviewThumb.src = src;
       imagePreviewWrap.classList.add("visible");
@@ -153,6 +169,21 @@
           ? "cardForm.titleEdit"
           : "cardForm.titleCreate"
       );
+    }
+
+    function appendLookupResult(currentText, newText) {
+      const existing = String(currentText || "");
+      const addition = String(newText || "").trim();
+
+      if (!addition) {
+        return existing;
+      }
+
+      if (!existing.trim()) {
+        return addition;
+      }
+
+      return `${existing}${existing.endsWith("\n") ? "" : "\n"}${addition}`;
     }
 
     function formatDefinitionSelection(lang) {
@@ -296,17 +327,38 @@
         return;
       }
 
+      let saveResult = null;
+
       if (editingDeck && editingCard) {
-        editingDeck.cards = editingDeck.cards.filter((card) => card.id !== editingCard.id);
+        saveResult = saveEditedCardToDeck(editingDeck, targetDeck, savedCard, editingCard.id);
+
+        if (!saveResult.isValid) {
+          ctx.toast.error(t("alerts.requiredFields"));
+          return;
+        }
+
+        if (!saveResult.didSave) {
+          if (saveResult.skippedCount > 0) {
+            ctx.toast.info(t("alerts.cardMoveSkipped", { deckName: targetDeck.name }));
+          }
+          return;
+        }
+
+        ctx.state.editingDeckId = saveResult.didMove ? targetDeck.id : editingDeck.id;
+      } else {
+        targetDeck.cards.push(savedCard);
+        ctx.state.editingDeckId = targetDeck.id;
       }
 
-      targetDeck.cards.push(savedCard);
-      ctx.state.editingDeckId = targetDeck.id;
       ctx.store.saveDecksSoon();
       ctx.homeView.render();
       ctx.libraryView.render();
       ctx.deckEditorView.render();
-      ctx.toast.success(t("alerts.cardSaved"));
+      ctx.toast.success(
+        saveResult?.didMove
+          ? t("alerts.cardMoved", { deckName: targetDeck.name })
+          : t("alerts.cardSaved")
+      );
       navigateBack();
     }
 
@@ -331,7 +383,7 @@
         if (response.aborted) return;
 
         if (response.ok && response.data.definition) {
-          backInput.value = response.data.definition;
+          backInput.value = appendLookupResult(backInput.value, response.data.definition);
           return;
         }
 
@@ -365,7 +417,7 @@
         if (response.aborted) return;
 
         if (response.ok && response.data.translation) {
-          backInput.value = response.data.translation;
+          backInput.value = appendLookupResult(backInput.value, response.data.translation);
           return;
         }
 
@@ -420,7 +472,7 @@
               src: photo.small,
               alt: photo.alt || query,
               title: t("cardForm.imageSelectTitle"),
-              "data-regular": photo.regular
+              "data-regular": optimizeUnsplashUrl(photo.regular)
             }
           }));
         });

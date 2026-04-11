@@ -3,7 +3,6 @@
 
   function createLibraryView(ctx) {
     const list = document.getElementById("libraryDeckList");
-    const createDeckInput = document.getElementById("newDeckNameInput");
     const mergeList = document.getElementById("mergeCheckboxList");
     const mergeNameInput = document.getElementById("mergeNewNameInput");
     let editingDeckNameId = null;
@@ -149,7 +148,7 @@
               }),
               createElement("button", {
                 className: "icon-btn",
-                children: [createElement("span", { text: "⇄", attrs: { "aria-hidden": "true" } })],
+                children: [createIcon("mergeDeck")],
                 attrs: {
                   type: "button",
                   "data-action": "merge",
@@ -160,7 +159,7 @@
               }),
               createElement("button", {
                 className: "icon-btn",
-                children: [createElement("span", { text: "⤴", attrs: { "aria-hidden": "true" } })],
+                children: [createIcon("share")],
                 attrs: {
                   type: "button",
                   "data-action": "share",
@@ -209,26 +208,7 @@
     }
 
     function openCreateDeck(returnScreen) {
-      ctx.state.createDeckReturn = returnScreen || "homeScreen";
-      createDeckInput.value = "";
-      ctx.router.goTo("createDeckScreen", ctx.navTargetForScreen(ctx.state.createDeckReturn));
-      createDeckInput.focus();
-    }
-
-    function saveDeck() {
-      const name = createDeckInput.value.trim();
-      if (!name) {
-        ctx.toast.error(t("alerts.enterDeckName"));
-        return;
-      }
-
-      const deck = createDeck(name);
-      ctx.state.decks.push(deck);
-      ctx.store.saveDecksSoon();
-      ctx.homeView.render();
-      render();
-      ctx.toast.success(t("alerts.deckCreated"));
-      ctx.deckEditorView.open(deck.id);
+      ctx.deckEditorView.openCreateDraft(returnScreen || "homeScreen");
     }
 
     function renderMergeOptions(selectedDeckIds = []) {
@@ -347,16 +327,6 @@
           skipped: result.skippedCount
         }));
       });
-    });
-
-    document.getElementById("saveDeckBtn").addEventListener("click", saveDeck);
-    document.getElementById("closeCreateDeckBtn").addEventListener("click", () => {
-      ctx.router.goTo(ctx.state.createDeckReturn, ctx.navTargetForScreen(ctx.state.createDeckReturn));
-    });
-    createDeckInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        saveDeck();
-      }
     });
 
     document.getElementById("closeMergeBtn").addEventListener("click", () => {

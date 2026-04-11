@@ -5,7 +5,12 @@
     const wrap = document.getElementById("studyWrap");
     const cardElement = document.getElementById("studyCard");
     const imageMetaCache = new Map();
+    const WARM_AHEAD_COUNT = 5;
     let resizeFrameId = null;
+
+    function hasPendingAnswer() {
+      return !!ctx.state.study.pendingAnswer;
+    }
 
     function resetLabels() {
       ["wrongLabel", "correctLabel", "unsureLabel", "backLabel"].forEach((id) => {
@@ -67,29 +72,91 @@
         return cached;
       }
 
+      let resolveEntryPromise = null;
       const entry = {
         status: "loading",
-        aspectRatio: null
+        aspectRatio: null,
+        promise: new Promise((resolve) => {
+          resolveEntryPromise = resolve;
+        })
       };
 
       imageMetaCache.set(url, entry);
 
       const probe = new Image();
-      probe.addEventListener("load", () => {
+      probe.addEventListener("load", async () => {
+        try {
+          if (typeof probe.decode === "function") {
+            await probe.decode();
+          }
+        } catch (e) {
+          // игнорируем, decode может падать
+        }
+
         entry.status = "loaded";
         entry.aspectRatio = probe.naturalWidth && probe.naturalHeight
           ? probe.naturalWidth / probe.naturalHeight
           : 1;
+
+        resolveEntryPromise(entry);
         renderIfCurrentImage(url);
       }, { once: true });
       probe.addEventListener("error", () => {
         entry.status = "error";
         entry.aspectRatio = null;
+        resolveEntryPromise(entry);
         renderIfCurrentImage(url);
       }, { once: true });
+      probe.decoding = "async";
       probe.src = url;
 
       return entry;
+    }
+
+    function getWarmImageUrls(limitAhead = WARM_AHEAD_COUNT) {
+      const queue = Array.isArray(ctx.state.study.queue) ? ctx.state.study.queue : [];
+      if (queue.length === 0) {
+        return [];
+      }
+
+      const urls = [];
+      const seenUrls = new Set();
+      const targetCount = limitAhead + 1;
+
+      for (let offset = 0; offset < queue.length && urls.length < targetCount; offset += 1) {
+        const index = (ctx.state.study.currentIndex + offset) % queue.length;
+        const card = queue[index];
+        const url = typeof card?.image === "string" ? card.image.trim() : "";
+        if (!url || seenUrls.has(url)) {
+          continue;
+        }
+
+        seenUrls.add(url);
+        urls.push(url);
+      }
+
+      return urls;
+    }
+
+    function warmUpcomingImages() {
+      getWarmImageUrls().forEach((url) => {
+        ensureImageMeta(url);
+      });
+    }
+
+    function isWaitingForCurrentImage() {
+      const currentCard = getCurrentStudyCard(ctx.state.study);
+      if (!currentCard) {
+        return false;
+      }
+
+      const imageUrl = getCurrentImage(currentCard, getCurrentSide());
+      if (!imageUrl) {
+        return false;
+      }
+
+      const meta = ensureImageMeta(imageUrl);
+      return meta?.status === "loading";
     }
 
     function resolveMediaLayout(currentSide, text, imageUrl) {
@@ -120,21 +187,14 @@
     }
 
     function finishSession() {
-      if (!ctx.state.study.session || ctx.state.study.session.reviewed === 0) {
+      if (!ctx.state.study.session) {
         return;
       }
 
       ctx.store.recordStudySession({
         deckId: ctx.state.study.session.deckId,
         deckName: ctx.state.study.session.deckName,
-        mode: ctx.state.study.session.mode,
-        reviewed: ctx.state.study.session.reviewed,
-        correct: ctx.state.study.session.correct,
-        wrong: ctx.state.study.session.wrong,
-        unsure: ctx.state.study.session.unsure,
-        percentCorrect: ctx.state.study.session.reviewed
-          ? Math.round((ctx.state.study.session.correct / ctx.state.study.session.reviewed) * 100)
-          : 0,
+        completedRounds: ctx.state.study.sessionCompletedRounds || 0,
         finishedAt: new Date().toISOString()
       });
     }
@@ -143,7 +203,8 @@
       const card = getCurrentStudyCard(ctx.state.study);
       const currentSide = getCurrentSide();
 
-      cardElement.classList.remove("is-flipped", "has-media", "is-layout-top", "is-layout-side");
+      cardElement.classList.remove("is-flipped", "has-media", "is-layout-top", "is-layout-side", "is-loading-media");
+      cardElement.setAttribute("aria-busy", "false");
 
       if (!card) {
         clearElement(cardElement);
@@ -151,8 +212,12 @@
         return;
       }
 
+      warmUpcomingImages();
+
       const text = getCurrentText(card);
       const imageUrl = getCurrentImage(card, currentSide);
+      const imageMeta = imageUrl ? ensureImageMeta(imageUrl) : null;
+      const isWaitingForImage = !!imageUrl && imageMeta?.status === "loading";
       const layout = resolveMediaLayout(currentSide, text, imageUrl);
 
       clearElement(cardElement);
@@ -160,6 +225,26 @@
       cardElement.classList.toggle("has-media", !!imageUrl);
       cardElement.classList.toggle("is-layout-top", layout === "top");
       cardElement.classList.toggle("is-layout-side", layout === "side");
+
+      if (isWaitingForImage) {
+        cardElement.classList.add("is-loading-media", "is-layout-top");
+        cardElement.setAttribute("aria-busy", "true");
+        cardElement.appendChild(createElement("div", {
+          className: "study-card-loading",
+          children: [
+            createElement("div", {
+              className: "study-card-loading-spinner",
+              attrs: { "aria-hidden": "true" }
+            }),
+            createElement("div", {
+              className: "study-card-loading-text",
+              text: t("common.loading")
+            })
+          ]
+        }));
+        resetLabels();
+        return;
+      }
 
       const content = createElement("div", {
         className:
@@ -199,65 +284,96 @@
       resetLabels();
     }
 
-    function start(deckId, mode = "all") {
+    function start(deckId) {
       const deck = ctx.getDeckById(deckId);
       if (!deck || deck.cards.length === 0) {
         ctx.toast.error(t("alerts.emptyDeckStudy"));
         return;
       }
 
-      const cards = deck.cards.filter((card) => {
-        const progress = ctx.state.studyProgress[card.id];
-
-        if (mode === "new") {
-          return !progress?.seenCount;
-        }
-
-        if (mode === "review") {
-          return !!progress?.seenCount;
-        }
-
-        return true;
+      ctx.state.studyMode = "all";
+      ctx.state.study = createStudyState({ cards: deck.cards }, Math.random, {
+        completedRounds: ctx.store.getCompletedRoundsForDeck(deckId)
       });
-
-      if (cards.length === 0) {
-        ctx.toast.error(t("alerts.noCardsForMode"));
-        return;
-      }
-
-      ctx.state.studyMode = mode;
-      ctx.state.study = createStudyState({ cards });
-      ctx.state.study.mode = mode;
+      ctx.state.study.mode = "all";
       ctx.state.study.session = {
         deckId,
         deckName: deck.name,
-        mode,
+        mode: "all",
         reviewed: 0,
         correct: 0,
         wrong: 0,
         unsure: 0
       };
 
+      warmUpcomingImages();
+      ctx.router.goTo("studyScreen", null);
       render();
       resetGlow();
-      ctx.router.goTo("studyScreen", null);
       cardElement.focus();
     }
 
-    function answer(result, interval) {
+    function recordAnswer(cardId, result) {
+      ctx.state.study.session.reviewed += 1;
+      ctx.state.study.session[result] += 1;
+      ctx.store.recordStudyAnswer(cardId, result);
+    }
+
+    function finalizeAnswer(result) {
       const card = getCurrentStudyCard(ctx.state.study);
       if (!card) return;
 
-      ctx.state.study.session.reviewed += 1;
-      ctx.state.study.session[result] += 1;
-      ctx.store.recordStudyAnswer(card.id, result);
-      advanceStudy(ctx.state.study, interval);
+      recordAnswer(card.id, result);
+      advanceStudy(ctx.state.study, result);
+      if (isWaitingForCurrentImage()) {
+        render();
+        return;
+      }
       render();
       resetGlow();
     }
 
-    function toggleFlip() {
-      if (!ctx.state.study.queue.length) return;
+    function finalizePendingAnswer() {
+      const card = getCurrentStudyCard(ctx.state.study);
+      const committedAnswer = commitPendingStudyAnswer(ctx.state.study);
+      if (!card || !committedAnswer) {
+        return false;
+      }
+
+      recordAnswer(card.id, committedAnswer.result);
+      render();
+      resetGlow();
+      return true;
+    }
+
+    function answer(result) {
+      if (!getCurrentStudyCard(ctx.state.study) || isWaitingForCurrentImage()) {
+        return;
+      }
+
+      if (hasPendingAnswer()) {
+        finalizeAnswer(result);
+        return;
+      }
+
+      if (result === "correct" || ctx.state.study.flipped) {
+        finalizeAnswer(result);
+        return;
+      }
+
+      if (queuePendingStudyAnswer(ctx.state.study, result)) {
+        render();
+        resetGlow();
+      }
+    }
+
+    function handleCardAction() {
+      if (!ctx.state.study.queue.length || isWaitingForCurrentImage()) return;
+
+      if (hasPendingAnswer()) {
+        finalizePendingAnswer();
+        return;
+      }
 
       ctx.state.study.flipped = !ctx.state.study.flipped;
       render();
@@ -265,20 +381,22 @@
     }
 
     function goBack() {
-      if (!ctx.state.study.queue.length) return;
+      if (!ctx.state.study.queue.length || isWaitingForCurrentImage()) return;
+
+      if (cancelPendingStudyAnswer(ctx.state.study)) {
+        render();
+        resetGlow();
+        return;
+      }
 
       if (ctx.state.study.flipped) {
-        ctx.state.study.pendingInterval = null;
         ctx.state.study.flipped = false;
         render();
         resetGlow();
         return;
       }
 
-      if (goToPreviousCard(ctx.state.study)) {
-        render();
-        resetGlow();
-      }
+      resetGlow();
     }
 
     function exitStudy() {
@@ -288,16 +406,16 @@
       resetGlow();
     }
 
-    cardElement.addEventListener("click", toggleFlip);
+    cardElement.addEventListener("click", handleCardAction);
 
     document.getElementById("wrongZone").addEventListener("click", () => {
-      answer("wrong", getStudyBase(ctx.state.study.queue.length));
+      answer("wrong");
     });
     document.getElementById("correctZone").addEventListener("click", () => {
-      answer("correct", getStudyBase(ctx.state.study.queue.length) * 6);
+      answer("correct");
     });
     document.getElementById("unsureZone").addEventListener("click", () => {
-      answer("unsure", getStudyBase(ctx.state.study.queue.length) * 3);
+      answer("unsure");
     });
     document.getElementById("backZone").addEventListener("click", goBack);
     document.getElementById("exitStudyBtn").addEventListener("click", exitStudy);
@@ -348,19 +466,19 @@
         case "Enter":
         case " ":
           event.preventDefault();
-          toggleFlip();
+          handleCardAction();
           break;
         case "ArrowLeft":
           event.preventDefault();
-          answer("wrong", getStudyBase(ctx.state.study.queue.length));
+          answer("wrong");
           break;
         case "ArrowDown":
           event.preventDefault();
-          answer("unsure", getStudyBase(ctx.state.study.queue.length) * 3);
+          answer("unsure");
           break;
         case "ArrowRight":
           event.preventDefault();
-          answer("correct", getStudyBase(ctx.state.study.queue.length) * 6);
+          answer("correct");
           break;
         case "ArrowUp":
           event.preventDefault();

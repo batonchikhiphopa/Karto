@@ -347,7 +347,7 @@
 
       switch (button.dataset.action) {
         case "study":
-          ctx.startStudy(deckId, "all");
+          ctx.startStudy(deckId);
           break;
         case "edit-deck":
           ctx.deckEditorView.open(deckId);
@@ -359,7 +359,7 @@
           ctx.deleteDeckWithUndo(deckId);
           break;
         case "create-deck":
-          ctx.libraryView.openCreateDeck("homeScreen");
+          ctx.deckEditorView.openCreateDraft("homeScreen");
           break;
       }
     });

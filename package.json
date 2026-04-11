@@ -1,6 +1,6 @@
 {
   "name": "karto",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "A flashcard application for efficient learning and memorization.",
   "author": "batonchikhiphopa",
   "private": true,
@@ -8,7 +8,7 @@
   "scripts": {
     "start": "electron .",
     "dev-server": "node server.js",
-    "test": "node tests/data-model.test.js && node tests/study-engine.test.js && node tests/app-state.test.js && node tests/i18n.test.js && node tests/global-shortcuts.test.js && node tests/sqlite-repository.test.js && node tests/api.test.js && node tests/export-import.test.js && node tests/startup-verification.test.js && node tests/server.test.js",
+    "test": "node scripts/run-tests.js",
     "postinstall": "electron-builder install-app-deps",
     "verify:dist": "node scripts/verify-dist.js",
     "build": "electron-builder",

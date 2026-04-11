@@ -14,10 +14,6 @@
   const desktopApi = root.kartoDesktop && root.kartoDesktop.isDesktop ? root.kartoDesktop : null;
 
   function navTargetForScreen(screenId) {
-    if (screenId === "createDeckScreen") {
-      return root.Karto.getPrimaryNavScreen(state.createDeckReturn);
-    }
-
     if (screenId === "createCardScreen") {
       return root.Karto.getPrimaryNavScreen(state.cardForm.returnScreen);
     }
@@ -34,7 +30,6 @@
       "editDeckScreen",
       "settingsScreen",
       "createCardScreen",
-      "createDeckScreen",
       "mergeDecksScreen",
       "addFromOtherScreen",
       "studyScreen"
@@ -318,8 +313,8 @@
   ctx.studyView = root.Karto.createStudyView(ctx);
   ctx.settingsView = root.Karto.createSettingsView(ctx);
 
-  ctx.startStudy = (deckId, mode) => {
-    ctx.studyView.start(deckId, mode);
+  ctx.startStudy = (deckId) => {
+    ctx.studyView.start(deckId);
   };
 
   root.document.addEventListener("keydown", (event) => {
@@ -342,7 +337,7 @@
     ctx.settingsView.render();
     ctx.cardFormView.render();
 
-    if (state.editingDeckId !== null) {
+    if (state.editingDeckId !== null || router.isVisible("editDeckScreen")) {
       ctx.deckEditorView.render();
     }
 

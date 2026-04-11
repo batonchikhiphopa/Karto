@@ -2,71 +2,276 @@
   const Karto = root.Karto || (root.Karto = {});
 
   function createDeckEditorView(ctx) {
-    const nameInput = document.getElementById("editDeckNameInput");
+    const titleElement = document.getElementById("editDeckTitle");
     const cardList = document.getElementById("editDeckCardList");
-    const searchInput = document.getElementById("editDeckSearchInput");
-    const bulkSummary = document.getElementById("bulkSummary");
-    const bulkMoveDeckSelect = document.getElementById("bulkMoveDeckSelect");
+    const createCardBtn = document.getElementById("editDeckCreateCardBtn");
+    const addFromOtherBtn = document.getElementById("editDeckAddFromOtherBtn");
+    const startStudyBtn = document.getElementById("startDeckStudyBtn");
+
+    let isCreatingDeckDraft = false;
+    let isRenamingDeck = false;
+    let ignoreNextDeckNameBlur = false;
+    let draftReturnScreen = "homeScreen";
 
     function getDeck() {
       return ctx.getDeckById(ctx.state.editingDeckId);
     }
 
-    function getFilteredCards(deck) {
-      const query = searchInput.value.trim().toLowerCase();
-      if (!query) return deck.cards;
+    function getRenderableDeck() {
+      if (isCreatingDeckDraft) {
+        return {
+          id: "",
+          name: "",
+          cards: []
+        };
+      }
 
-      return deck.cards.filter((card) => {
-        return (
-          card.frontText.toLowerCase().includes(query) ||
-          card.backText.toLowerCase().includes(query)
-        );
+      return getDeck();
+    }
+
+    function getAvailableTargetDecks() {
+      return ctx.state.decks.filter((deck) => deck.id !== ctx.state.editingDeckId);
+    }
+
+    function isCurrentDeckCardId(cardId) {
+      const deck = getDeck();
+      return !!deck?.cards.some((card) => card.id === cardId);
+    }
+
+    function getActionCardIds(clickedCardId) {
+      const deck = getDeck();
+      if (!deck) return [];
+
+      const deckIds = new Set(deck.cards.map((card) => card.id));
+      const selectedIds = ctx.state.selectedCardIds.filter((cardId) => deckIds.has(cardId));
+      if (selectedIds.length > 0) {
+        return selectedIds;
+      }
+
+      return deckIds.has(clickedCardId) ? [clickedCardId] : [];
+    }
+
+    function closeInlineMoveMenu() {
+      ctx.state.openMoveCardId = null;
+      ctx.state.pendingMoveDeckId = "";
+    }
+
+    function closeEditor() {
+      if (isCreatingDeckDraft) {
+        isCreatingDeckDraft = false;
+        isRenamingDeck = false;
+        ignoreNextDeckNameBlur = false;
+        ctx.state.editingDeckId = null;
+        ctx.router.goTo(draftReturnScreen, ctx.navTargetForScreen(draftReturnScreen));
+        return;
+      }
+
+      ctx.libraryView.render();
+      ctx.router.goTo("libraryScreen", "libraryScreen");
+    }
+
+    function commitDeckName(value, options = {}) {
+      const name = value.trim();
+
+      if (!name) {
+        if (options.force) {
+          ctx.toast.error(t("alerts.enterName"));
+        }
+        return false;
+      }
+
+      if (isCreatingDeckDraft) {
+        const deck = createDeck(name);
+        ctx.state.decks.push(deck);
+        ctx.state.editingDeckId = deck.id;
+        isCreatingDeckDraft = false;
+        isRenamingDeck = false;
+        ctx.store.saveDecksSoon();
+        ctx.homeView.render();
+        ctx.libraryView.render();
+        render();
+        ctx.toast.success(t("alerts.deckCreated"));
+        return true;
+      }
+
+      const deck = getDeck();
+      if (!deck) return false;
+
+      if (deck.name === name) {
+        isRenamingDeck = false;
+        render();
+        return true;
+      }
+
+      deck.name = name;
+      isRenamingDeck = false;
+      ctx.store.saveDecksSoon();
+      ctx.homeView.render();
+      ctx.libraryView.render();
+      render();
+      ctx.toast.success(t("alerts.deckNameSaved"));
+      return true;
+    }
+
+    function cancelDeckRename() {
+      if (isCreatingDeckDraft) {
+        closeEditor();
+        return;
+      }
+
+      isRenamingDeck = false;
+      render();
+    }
+
+    function createDeckNameControl(deck) {
+      const shouldShowInput = isCreatingDeckDraft || isRenamingDeck;
+
+      if (shouldShowInput) {
+        return createElement("input", {
+          className: "form-input editdeck-title-input",
+          value: deck.name,
+          attrs: {
+            type: "text",
+            "data-deck-name-input": "true",
+            "aria-label": t("actions.renameDeck"),
+            placeholder: t("editDeck.namePlaceholder")
+          },
+          listeners: {
+            keydown(event) {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                ignoreNextDeckNameBlur = true;
+                commitDeckName(event.currentTarget.value, { force: true });
+              }
+
+              if (event.key === "Escape") {
+                event.preventDefault();
+                ignoreNextDeckNameBlur = true;
+                cancelDeckRename();
+              }
+            },
+            blur(event) {
+              if (ignoreNextDeckNameBlur) {
+                ignoreNextDeckNameBlur = false;
+                return;
+              }
+
+              if (isCreatingDeckDraft && !event.currentTarget.value.trim()) {
+                return;
+              }
+
+              commitDeckName(event.currentTarget.value);
+            }
+          }
+        });
+      }
+
+      return createElement("button", {
+        className: "editdeck-title-btn",
+        text: deck.name,
+        attrs: {
+          type: "button",
+          "aria-label": t("actions.renameDeck"),
+          title: t("actions.renameDeck")
+        },
+        listeners: {
+          click() {
+            isRenamingDeck = true;
+            render();
+          }
+        }
       });
     }
 
-    function populateMoveDeckSelect() {
-      clearElement(bulkMoveDeckSelect);
+    function renderDeckTitle(deck) {
+      clearElement(titleElement);
+      titleElement.appendChild(createDeckNameControl(deck));
 
-      bulkMoveDeckSelect.appendChild(
-        createElement("option", {
-          value: "",
-          text: t("bulk.moveToDeckPlaceholder")
-        })
-      );
-
-      ctx.state.decks
-        .filter((deck) => deck.id !== ctx.state.editingDeckId)
-        .forEach((deck) => {
-          bulkMoveDeckSelect.appendChild(
-            createElement("option", {
-              value: deck.id,
-              text: deck.name
-            })
-          );
+      if (isCreatingDeckDraft || isRenamingDeck) {
+        root.requestAnimationFrame(() => {
+          const input = titleElement.querySelector("[data-deck-name-input='true']");
+          if (!input) return;
+          input.focus();
+          input.select();
         });
+      }
     }
 
-    function renderBulkSummary(deck) {
-      const selectedCount = ctx.state.selectedCardIds.length;
-      bulkSummary.textContent = selectedCount
-        ? t("bulk.selectedSummary", { count: selectedCount })
-        : t("bulk.noneSelected");
+    function syncToolbarState() {
+      const isDraft = isCreatingDeckDraft;
+      [createCardBtn, addFromOtherBtn, startStudyBtn].forEach((button) => {
+        button.disabled = isDraft;
+      });
+    }
 
-      bulkMoveDeckSelect.disabled = selectedCount === 0 || bulkMoveDeckSelect.options.length <= 1;
-      document.getElementById("bulkMoveBtn").disabled = bulkMoveDeckSelect.disabled;
-      document.getElementById("bulkDeleteBtn").disabled = selectedCount === 0;
-      document.getElementById("selectAllCardsBtn").disabled = !deck || deck.cards.length === 0;
+    function openInlineMoveMenu(cardId) {
+      const targetDecks = getAvailableTargetDecks();
+      if (targetDecks.length === 0) {
+        ctx.toast.error(t("alerts.noOtherDecks"));
+        return;
+      }
+
+      ctx.state.openMoveCardId = cardId;
+      ctx.state.pendingMoveDeckId = targetDecks[0].id;
+      render();
+    }
+
+    function updateInlineMoveTarget(deckId) {
+      ctx.state.pendingMoveDeckId = deckId;
+    }
+
+    function createInlineMoveMenu(cardId) {
+      return createElement("div", {
+        className: "card-row-inline-move",
+        children: [
+          createElement("select", {
+            className: "form-input card-row-move-select",
+            attrs: {
+              "data-action": "select-move-deck",
+              "data-card-id": cardId,
+              "aria-label": t("editDeck.moveToDeckLabel")
+            },
+            children: getAvailableTargetDecks().map((deck) => createElement("option", {
+              value: deck.id,
+              text: deck.name,
+              properties: {
+                selected: deck.id === ctx.state.pendingMoveDeckId
+              }
+            }))
+          }),
+          createElement("button", {
+            className: "lib-btn",
+            text: t("editDeck.moveConfirm"),
+            attrs: {
+              type: "button",
+              "data-action": "confirm-move-card",
+              "data-card-id": cardId
+            },
+            properties: {
+              disabled: !ctx.state.pendingMoveDeckId
+            }
+          }),
+          createElement("button", {
+            className: "lib-btn",
+            text: t("editDeck.moveCancel"),
+            attrs: {
+              type: "button",
+              "data-action": "cancel-move-card",
+              "data-card-id": cardId
+            }
+          })
+        ]
+      });
     }
 
     function createCardRow(card) {
       const isSelected = ctx.state.selectedCardIds.includes(card.id);
+      const isMoveMenuOpen = ctx.state.openMoveCardId === card.id;
+      const canMoveToOtherDeck = getAvailableTargetDecks().length > 0;
 
       return createElement("div", {
-        className: "card-row",
+        className: `card-row${isSelected ? " is-selected" : ""}`,
         dataset: { cardId: card.id },
-        attrs: {
-          draggable: "true"
-        },
         children: [
           createElement("label", {
             className: "card-row-select",
@@ -103,16 +308,6 @@
             className: "card-row-actions",
             children: [
               createElement("button", {
-                className: "icon-btn drag-handle",
-                children: [createElement("span", { text: "⠿", attrs: { "aria-hidden": "true" } })],
-                attrs: {
-                  type: "button",
-                  "data-action": "drag",
-                  "data-card-id": card.id,
-                  "aria-label": "Drag to reorder"
-                }
-              }),
-              createElement("button", {
                 className: "icon-btn icon-btn-accent",
                 children: [createElement("span", { text: "✎", attrs: { "aria-hidden": "true" } })],
                 attrs: {
@@ -121,6 +316,20 @@
                   "data-card-id": card.id,
                   "aria-label": t("actions.editCard"),
                   title: t("actions.editCard")
+                }
+              }),
+              createElement("button", {
+                className: "icon-btn",
+                children: [createIcon("moveCard")],
+                attrs: {
+                  type: "button",
+                  "data-action": "open-move-card",
+                  "data-card-id": card.id,
+                  "aria-label": t("actions.moveCard"),
+                  title: t("actions.moveCard")
+                },
+                properties: {
+                  disabled: !canMoveToOtherDeck
                 }
               }),
               createElement("button", {
@@ -135,33 +344,147 @@
                 }
               })
             ]
-          })
+          }),
+          isMoveMenuOpen ? createInlineMoveMenu(card.id) : null
         ]
       });
     }
 
-    function render() {
+    function moveCards(cardIds, targetDeckId) {
       const deck = getDeck();
+      const targetDeck = ctx.getDeckById(targetDeckId);
+      if (!deck || !targetDeck) {
+        return null;
+      }
+
+      const deckIds = new Set(deck.cards.map((card) => card.id));
+      const actionCardIds = cardIds.filter((cardId) => deckIds.has(cardId));
+      if (actionCardIds.length === 0) {
+        return null;
+      }
+
+      const result = moveCardsBetweenDecks(deck, targetDeck, actionCardIds);
+      if (!result.isValid) {
+        return null;
+      }
+
+      const actionIdSet = new Set(actionCardIds);
+      ctx.state.selectedCardIds = ctx.state.selectedCardIds.filter((cardId) => {
+        return !actionIdSet.has(cardId);
+      });
+
+      if (result.movedCardIds.length > 0) {
+        ctx.store.saveDecksSoon();
+        ctx.homeView.render();
+        ctx.libraryView.render();
+      }
+
+      return {
+        ...result,
+        targetDeck,
+        actionCount: actionCardIds.length
+      };
+    }
+
+    function moveCardsFromRow(cardId) {
+      const result = moveCards(getActionCardIds(cardId), ctx.state.pendingMoveDeckId);
+      closeInlineMoveMenu();
+      render();
+
+      if (!result) {
+        return;
+      }
+
+      if (result.actionCount === 1 && result.cards.length > 0) {
+        ctx.toast.success(t("alerts.cardMoved", { deckName: result.targetDeck.name }));
+        return;
+      }
+
+      if (result.actionCount === 1 && result.skippedCount > 0) {
+        ctx.toast.info(t("alerts.cardMoveSkipped", { deckName: result.targetDeck.name }));
+        return;
+      }
+
+      const toastMethod = result.cards.length > 0 ? "success" : "info";
+      ctx.toast[toastMethod](t("alerts.cardsMoved", {
+        added: result.cards.length,
+        skipped: result.skippedCount
+      }));
+    }
+
+    function deleteCardsFromRow(cardId) {
+      const deck = getDeck();
+      const actionCardIds = getActionCardIds(cardId);
+      if (!deck || actionCardIds.length === 0) return;
+
+      const actionIdSet = new Set(actionCardIds);
+      const removedCount = deck.cards.filter((card) => actionIdSet.has(card.id)).length;
+      if (removedCount === 0) return;
+
+      const snapshot = ctx.store.createSnapshot();
+      deck.cards = deck.cards.filter((card) => !actionIdSet.has(card.id));
+      ctx.state.selectedCardIds = ctx.state.selectedCardIds.filter((id) => !actionIdSet.has(id));
+      closeInlineMoveMenu();
+      ctx.store.saveDecksSoon();
+      ctx.homeView.render();
+      ctx.libraryView.render();
+      render();
+
+      ctx.toast.info(
+        removedCount === 1
+          ? t("alerts.cardDeleted")
+          : t("alerts.cardsDeleted", { count: removedCount }),
+        {
+          actionLabel: t("common.undo"),
+          duration: 6000,
+          onAction: () => {
+            ctx.restoreSnapshot(snapshot);
+          }
+        }
+      );
+    }
+
+    function syncInlineMoveState(deck) {
+      if (!deck) {
+        closeInlineMoveMenu();
+        return;
+      }
+
+      if (ctx.state.openMoveCardId && !deck.cards.some((card) => card.id === ctx.state.openMoveCardId)) {
+        closeInlineMoveMenu();
+        return;
+      }
+
+      if (
+        ctx.state.openMoveCardId &&
+        ctx.state.pendingMoveDeckId &&
+        !getAvailableTargetDecks().some((targetDeck) => targetDeck.id === ctx.state.pendingMoveDeckId)
+      ) {
+        ctx.state.pendingMoveDeckId = "";
+      }
+    }
+
+    function render() {
+      const deck = getRenderableDeck();
       if (!deck) return;
 
-      nameInput.value = deck.name;
+      syncToolbarState();
+      renderDeckTitle(deck);
       clearElement(cardList);
-      populateMoveDeckSelect();
-      renderBulkSummary(deck);
 
-      const filteredCards = getFilteredCards(deck);
+      if (isCreatingDeckDraft) {
+        cardList.appendChild(ctx.createEmptyMessage(t("editDeck.draftHint")));
+        return;
+      }
+
+      syncInlineMoveState(deck);
 
       if (deck.cards.length === 0) {
         cardList.appendChild(ctx.createEmptyMessage(t("editDeck.empty")));
         return;
       }
 
-      if (filteredCards.length === 0) {
-        cardList.appendChild(ctx.createEmptyMessage(t("alerts.nothingFound")));
-        return;
-      }
-
-      filteredCards.forEach((card) => {
+      deck.cards.forEach((card) => {
         cardList.appendChild(createCardRow(card));
       });
     }
@@ -170,14 +493,31 @@
       const deck = ctx.getDeckById(deckId);
       if (!deck) return;
 
+      isCreatingDeckDraft = false;
+      isRenamingDeck = false;
+      ignoreNextDeckNameBlur = false;
       ctx.state.editingDeckId = deckId;
       ctx.state.selectedCardIds = [];
-      searchInput.value = "";
+      closeInlineMoveMenu();
       render();
       ctx.router.goTo("editDeckScreen", "libraryScreen");
     }
 
+    function openCreateDraft(returnScreen = "homeScreen") {
+      isCreatingDeckDraft = true;
+      isRenamingDeck = true;
+      ignoreNextDeckNameBlur = false;
+      draftReturnScreen = returnScreen;
+      ctx.state.editingDeckId = null;
+      ctx.state.selectedCardIds = [];
+      closeInlineMoveMenu();
+      render();
+      ctx.router.goTo("editDeckScreen", ctx.navTargetForScreen(returnScreen));
+    }
+
     function toggleSelection(cardId) {
+      if (!isCurrentDeckCardId(cardId)) return;
+
       if (ctx.state.selectedCardIds.includes(cardId)) {
         ctx.state.selectedCardIds = ctx.state.selectedCardIds.filter((id) => id !== cardId);
       } else {
@@ -185,82 +525,6 @@
       }
 
       render();
-    }
-
-    function renameDeck() {
-      const deck = getDeck();
-      if (!deck) return;
-
-      const name = nameInput.value.trim();
-      if (!name) {
-        ctx.toast.error(t("alerts.enterName"));
-        return;
-      }
-
-      deck.name = name;
-      ctx.store.saveDecksSoon();
-      ctx.homeView.render();
-      ctx.libraryView.render();
-      render();
-      ctx.toast.success(t("alerts.deckNameSaved"));
-    }
-
-    function deleteSelectedCards() {
-      if (ctx.state.selectedCardIds.length === 0) return;
-
-      const deck = getDeck();
-      const selectedIds = new Set(ctx.state.selectedCardIds);
-      const removedCount = deck.cards.filter((card) => selectedIds.has(card.id)).length;
-
-      const snapshot = ctx.store.createSnapshot();
-      deck.cards = deck.cards.filter((card) => !selectedIds.has(card.id));
-      ctx.state.selectedCardIds = [];
-      ctx.store.saveDecksSoon();
-      ctx.homeView.render();
-      ctx.libraryView.render();
-      render();
-
-      ctx.toast.info(t("alerts.cardsDeleted", { count: removedCount }), {
-        actionLabel: t("common.undo"),
-        duration: 6000,
-        onAction: () => {
-          ctx.restoreSnapshot(snapshot);
-        }
-      });
-    }
-
-    function moveSelectedCards() {
-      const deck = getDeck();
-      const targetDeck = ctx.getDeckById(bulkMoveDeckSelect.value);
-
-      if (!deck || !targetDeck || ctx.state.selectedCardIds.length === 0) {
-        return;
-      }
-
-      const selectedCards = deck.cards.filter((card) => ctx.state.selectedCardIds.includes(card.id));
-      const result = prepareDeckImport(selectedCards, targetDeck);
-      const acceptedFingerprints = new Set(result.cards.map(cardFingerprint));
-
-      targetDeck.cards.push(...result.cards);
-      deck.cards = deck.cards.filter((card) => {
-        if (!ctx.state.selectedCardIds.includes(card.id)) {
-          return true;
-        }
-
-        return !acceptedFingerprints.has(cardFingerprint(card));
-      });
-
-      ctx.state.selectedCardIds = [];
-      bulkMoveDeckSelect.value = "";
-      ctx.store.saveDecksSoon();
-      ctx.homeView.render();
-      ctx.libraryView.render();
-      render();
-
-      ctx.toast.success(t("alerts.cardsMoved", {
-        added: result.cards.length,
-        skipped: result.skippedCount
-      }));
     }
 
     function copyFromOtherDeck(cardId) {
@@ -362,134 +626,49 @@
         toggleSelection(cardId);
       }
 
+      if (button.dataset.action === "open-move-card") {
+        if (ctx.state.openMoveCardId === cardId) {
+          closeInlineMoveMenu();
+          render();
+        } else {
+          openInlineMoveMenu(cardId);
+        }
+      }
+
+      if (button.dataset.action === "confirm-move-card") {
+        moveCardsFromRow(cardId);
+      }
+
+      if (button.dataset.action === "cancel-move-card") {
+        closeInlineMoveMenu();
+        render();
+      }
+
       if (button.dataset.action === "edit-card") {
         ctx.cardFormView.open(deck.id, cardId, "editDeckScreen");
       }
 
       if (button.dataset.action === "delete-card") {
-        const snapshot = ctx.store.createSnapshot();
-        deck.cards = deck.cards.filter((card) => card.id !== cardId);
-        ctx.state.selectedCardIds = ctx.state.selectedCardIds.filter((id) => id !== cardId);
-        ctx.store.saveDecksSoon();
-        ctx.homeView.render();
-        ctx.libraryView.render();
-        render();
-
-        ctx.toast.info(t("alerts.cardDeleted"), {
-          actionLabel: t("common.undo"),
-          duration: 6000,
-          onAction: () => {
-            ctx.restoreSnapshot(snapshot);
-          }
-        });
+        deleteCardsFromRow(cardId);
       }
     });
 
-    cardList.addEventListener("dragstart", (event) => {
-      const row = event.target.closest(".card-row[draggable='true']");
-      if (!row) return;
+    cardList.addEventListener("change", (event) => {
+      const select = event.target.closest("[data-action='select-move-deck']");
+      if (!select) return;
 
-      ctx.state.dragCardId = row.dataset.cardId;
-      row.classList.add("dragging");
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", row.dataset.cardId);
+      updateInlineMoveTarget(select.value);
     });
 
-    cardList.addEventListener("dragend", (event) => {
-      const row = event.target.closest(".card-row");
-      if (row) {
-        row.classList.remove("dragging");
-      }
-
-      ctx.state.dragCardId = null;
-      cardList.querySelectorAll(".card-row").forEach((item) => item.classList.remove("drag-over"));
-    });
-
-    cardList.addEventListener("dragover", (event) => {
-      const row = event.target.closest(".card-row[draggable='true']");
-      if (!row || !ctx.state.dragCardId || row.dataset.cardId === ctx.state.dragCardId) return;
-
-      event.preventDefault();
-      cardList.querySelectorAll(".card-row").forEach((item) => item.classList.remove("drag-over"));
-      row.classList.add("drag-over");
-    });
-
-    cardList.addEventListener("drop", (event) => {
-      const row = event.target.closest(".card-row[draggable='true']");
-      const deck = getDeck();
-      if (!row || !deck || !ctx.state.dragCardId || row.dataset.cardId === ctx.state.dragCardId) return;
-
-      event.preventDefault();
-
-      const fromIndex = deck.cards.findIndex((card) => card.id === ctx.state.dragCardId);
-      const toIndex = deck.cards.findIndex((card) => card.id === row.dataset.cardId);
-      if (fromIndex === -1 || toIndex === -1) return;
-
-      const [movedCard] = deck.cards.splice(fromIndex, 1);
-      deck.cards.splice(toIndex, 0, movedCard);
-      ctx.store.saveDecksSoon();
-      ctx.homeView.render();
-      render();
-    });
-
-    document.getElementById("renameDeckBtn").addEventListener("click", renameDeck);
-    nameInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        renameDeck();
-      }
-    });
-
-    document.getElementById("closeEditDeckBtn").addEventListener("click", () => {
-      ctx.libraryView.render();
-      ctx.router.goTo("libraryScreen", "libraryScreen");
-    });
-    document.getElementById("editDeckCreateCardBtn").addEventListener("click", () => {
+    document.getElementById("closeEditDeckBtn").addEventListener("click", closeEditor);
+    createCardBtn.addEventListener("click", () => {
       ctx.cardFormView.open(ctx.state.editingDeckId, null, "editDeckScreen");
     });
-    document.getElementById("editDeckAddFromOtherBtn").addEventListener("click", () => {
+    addFromOtherBtn.addEventListener("click", () => {
       openAddFromOther(ctx.state.editingDeckId);
     });
-    document.getElementById("editDeckShareBtn").addEventListener("click", () => {
-      const deck = getDeck();
-      if (!deck) return;
-      ctx.shareDeck(deck);
-    });
-    document.getElementById("editDeckImportBtn").addEventListener("click", () => {
-      const deck = getDeck();
-      if (!deck) return;
-
-      ctx.importJson((rawPayload) => {
-        const result = prepareDeckImport(rawPayload, deck);
-        if (!result.isValid) {
-          ctx.toast.error(t("alerts.invalidFormat"));
-          return;
-        }
-
-        deck.cards = deck.cards.concat(result.cards);
-        ctx.store.saveDecksSoon();
-        ctx.homeView.render();
-        ctx.libraryView.render();
-        render();
-
-        ctx.toast.success(t("alerts.deckImportSummary", {
-          added: result.cards.length,
-          skipped: result.skippedCount
-        }));
-      });
-    });
-    searchInput.addEventListener("input", () => {
-      render();
-    });
-    document.getElementById("selectAllCardsBtn").addEventListener("click", () => {
-      const deck = getDeck();
-      if (!deck) return;
-      ctx.state.selectedCardIds = getFilteredCards(deck).map((card) => card.id);
-      render();
-    });
-    document.getElementById("bulkDeleteBtn").addEventListener("click", deleteSelectedCards);
-    document.getElementById("bulkMoveBtn").addEventListener("click", moveSelectedCards);
-    document.getElementById("startDeckStudyBtn").addEventListener("click", () => {
-      ctx.startStudy(ctx.state.editingDeckId, document.getElementById("studyModeSelect").value);
+    startStudyBtn.addEventListener("click", () => {
+      ctx.startStudy(ctx.state.editingDeckId);
     });
 
     document.getElementById("sourceOtherDeckSelect").addEventListener("change", renderSourceCardList);
@@ -505,6 +684,7 @@
 
     return {
       open,
+      openCreateDraft,
       render,
       renderSourceCardList,
       openAddFromOther

@@ -9,6 +9,7 @@
     studyProgress: "karto.studyProgress",
     studySessions: "karto.studySessions"
   };
+  const MAX_ROUND_HISTORY_SESSIONS_PER_DECK = 5;
 
   function debounce(fn, wait) {
     let timerId = null;
@@ -137,27 +138,80 @@
     }, {});
   }
 
+  function normalizeCompletedRounds(value) {
+    return Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : null;
+  }
+
+  function compareStudySessionsByFinishedAtDesc(left, right) {
+    const leftTime = Date.parse(left.finishedAt) || 0;
+    const rightTime = Date.parse(right.finishedAt) || 0;
+    return rightTime - leftTime;
+  }
+
+  function normalizeLoadedStudySession(entry) {
+    if (!entry || typeof entry !== "object") {
+      return null;
+    }
+
+    const deckId = typeof entry.deckId === "string" ? entry.deckId.trim() : "";
+    if (!deckId) {
+      return null;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(entry, "completedRounds")) {
+      return null;
+    }
+
+    const completedRounds = normalizeCompletedRounds(entry.completedRounds);
+    if (completedRounds === null) {
+      return null;
+    }
+
+    return {
+      deckId,
+      deckName: typeof entry.deckName === "string" && entry.deckName ? entry.deckName : "Deck",
+      completedRounds,
+      finishedAt: typeof entry.finishedAt === "string" && entry.finishedAt ? entry.finishedAt : new Date().toISOString()
+    };
+  }
+
+  function limitStudySessionsPerDeck(sessions) {
+    const countsByDeckId = new Map();
+
+    return sessions
+      .slice()
+      .sort(compareStudySessionsByFinishedAtDesc)
+      .filter((session) => {
+        const count = countsByDeckId.get(session.deckId) || 0;
+        if (count >= MAX_ROUND_HISTORY_SESSIONS_PER_DECK) {
+          return false;
+        }
+
+        countsByDeckId.set(session.deckId, count + 1);
+        return true;
+      });
+  }
+
   function normalizeLoadedStudySessions(value) {
     if (!Array.isArray(value)) {
       return [];
     }
 
-    return value
-      .filter((entry) => entry && typeof entry === "object")
-      .map((entry) => ({
-        deckId: typeof entry.deckId === "string" && entry.deckId ? entry.deckId : null,
-        deckName: typeof entry.deckName === "string" && entry.deckName ? entry.deckName : "Deck",
-        mode: typeof entry.mode === "string" && entry.mode ? entry.mode : "all",
-        reviewed: Number.isFinite(Number(entry.reviewed)) ? Math.max(0, Math.round(Number(entry.reviewed))) : 0,
-        correct: Number.isFinite(Number(entry.correct)) ? Math.max(0, Math.round(Number(entry.correct))) : 0,
-        wrong: Number.isFinite(Number(entry.wrong)) ? Math.max(0, Math.round(Number(entry.wrong))) : 0,
-        unsure: Number.isFinite(Number(entry.unsure)) ? Math.max(0, Math.round(Number(entry.unsure))) : 0,
-        percentCorrect: Number.isFinite(Number(entry.percentCorrect))
-          ? Math.max(0, Math.round(Number(entry.percentCorrect)))
-          : 0,
-        finishedAt: typeof entry.finishedAt === "string" && entry.finishedAt ? entry.finishedAt : new Date().toISOString()
-      }))
-      .slice(0, 20);
+    return limitStudySessionsPerDeck(
+      value
+        .map(normalizeLoadedStudySession)
+        .filter(Boolean)
+    );
+  }
+
+  function getCompletedRoundsForDeck(sessions, deckId) {
+    if (typeof deckId !== "string" || !deckId.trim()) {
+      return 0;
+    }
+
+    return normalizeLoadedStudySessions(sessions)
+      .filter((session) => session.deckId === deckId)
+      .reduce((sum, session) => sum + session.completedRounds, 0);
   }
 
   function createAppState() {
@@ -167,7 +221,6 @@
     const state = {
       decks: [],
       currentScreenId: "homeScreen",
-      createDeckReturn: "homeScreen",
       editingDeckId: null,
       addOtherTargetDeckId: null,
       selectedCardIds: [],
@@ -185,7 +238,8 @@
       languagePreference: resolveLanguagePreference(null),
       themePreference: normalizeThemePreference(storage?.getItem?.(STORAGE_KEYS.theme)),
       homeGridColumns: normalizeHomeGridColumns(storage?.getItem?.(STORAGE_KEYS.homeGridColumns)),
-      dragCardId: null
+      openMoveCardId: null,
+      pendingMoveDeckId: ""
     };
 
     function applyTheme() {
@@ -288,6 +342,7 @@
 
       if (!desktopPersistence) {
         saveDecksNow();
+        storage?.setItem?.(STORAGE_KEYS.studySessions, JSON.stringify(state.studySessions));
       }
 
       applyTheme();
@@ -351,7 +406,7 @@
     }
 
     function recordStudySession(summary) {
-      state.studySessions = [summary].concat(state.studySessions).slice(0, 20);
+      state.studySessions = normalizeLoadedStudySessions([summary].concat(state.studySessions));
 
       if (desktopPersistence) {
         state.studySessions = normalizeLoadedStudySessions(
@@ -399,7 +454,7 @@
         state.studyProgress = nextSnapshot.studyProgress || {};
         storage?.setItem?.(STORAGE_KEYS.studyProgress, JSON.stringify(state.studyProgress));
 
-        state.studySessions = Array.isArray(nextSnapshot.studySessions) ? nextSnapshot.studySessions : [];
+        state.studySessions = normalizeLoadedStudySessions(nextSnapshot.studySessions);
         storage?.setItem?.(STORAGE_KEYS.studySessions, JSON.stringify(state.studySessions));
 
         setThemePreference(nextSnapshot.themePreference);
@@ -480,6 +535,7 @@
       saveDecksSoon,
       persistStudyProgress,
       persistStudySessions,
+      getCompletedRoundsForDeck: (deckId) => getCompletedRoundsForDeck(state.studySessions, deckId),
       setThemePreference,
       setHomeGridColumns,
       setLanguagePreference,
@@ -493,5 +549,8 @@
 
   Karto.createAppState = createAppState;
   Karto.STORAGE_KEYS = STORAGE_KEYS;
+  Karto.MAX_ROUND_HISTORY_SESSIONS_PER_DECK = MAX_ROUND_HISTORY_SESSIONS_PER_DECK;
+  Karto.getCompletedRoundsForDeck = getCompletedRoundsForDeck;
+  Karto.normalizeLoadedStudySessions = normalizeLoadedStudySessions;
   Karto.normalizeHomeGridColumns = normalizeHomeGridColumns;
 })(typeof window !== "undefined" ? window : globalThis);

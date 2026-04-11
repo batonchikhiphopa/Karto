@@ -378,6 +378,171 @@
     };
   }
 
+  function moveCardsBetweenDecks(sourceDeck, targetDeck, cardIds) {
+    const selectedIds = new Set(
+      Array.isArray(cardIds)
+        ? cardIds
+          .filter(hasStableId)
+          .map((cardId) => cardId.trim())
+        : []
+    );
+
+    if (
+      !isDeckLike(sourceDeck) ||
+      !isDeckLike(targetDeck) ||
+      selectedIds.size === 0
+    ) {
+      return {
+        cards: [],
+        skippedCount: 0,
+        totalCount: 0,
+        movedCardIds: [],
+        isValid: false
+      };
+    }
+
+    const selectedCards = sourceDeck.cards.filter((card) => selectedIds.has(card.id));
+    if (selectedCards.length === 0) {
+      return {
+        cards: [],
+        skippedCount: 0,
+        totalCount: 0,
+        movedCardIds: [],
+        isValid: true
+      };
+    }
+
+    const existingFingerprints = new Set(targetDeck.cards.map(cardFingerprint));
+    const existingIds = new Set(targetDeck.cards.map((card) => card.id));
+    const selectedFingerprints = new Set();
+    const acceptedCards = [];
+    const movedCardIds = [];
+    let skippedCount = 0;
+
+    selectedCards.forEach((card) => {
+      const fingerprint = cardFingerprint(card);
+      if (existingFingerprints.has(fingerprint) || selectedFingerprints.has(fingerprint)) {
+        skippedCount += 1;
+        return;
+      }
+
+      let candidate = card;
+      if (existingIds.has(card.id)) {
+        candidate = cloneCard(card, { freshId: true });
+      }
+
+      if (!candidate) {
+        skippedCount += 1;
+        return;
+      }
+
+      acceptedCards.push(candidate);
+      movedCardIds.push(card.id);
+      existingIds.add(candidate.id);
+      existingFingerprints.add(fingerprint);
+      selectedFingerprints.add(fingerprint);
+    });
+
+    targetDeck.cards.push(...acceptedCards);
+
+    const movedIdSet = new Set(movedCardIds);
+    sourceDeck.cards = sourceDeck.cards.filter((card) => {
+      return !movedIdSet.has(card.id);
+    });
+
+    return {
+      cards: acceptedCards,
+      skippedCount,
+      totalCount: selectedCards.length,
+      isValid: true,
+      movedCardIds
+    };
+  }
+
+  function saveEditedCardToDeck(sourceDeck, targetDeck, editedCard, originalCardId) {
+    const sourceCardId = hasStableId(originalCardId)
+      ? originalCardId.trim()
+      : hasStableId(editedCard?.id)
+        ? editedCard.id.trim()
+        : "";
+    const normalizedCard = normalizeCard(editedCard);
+
+    if (
+      !isDeckLike(sourceDeck) ||
+      !isDeckLike(targetDeck) ||
+      !normalizedCard ||
+      !hasStableId(sourceCardId)
+    ) {
+      return {
+        card: null,
+        cards: [],
+        didMove: false,
+        didSave: false,
+        isValid: false,
+        skippedCount: 0
+      };
+    }
+
+    const sourceCardIndex = sourceDeck.cards.findIndex((card) => card.id === sourceCardId);
+    if (sourceCardIndex === -1) {
+      return {
+        card: null,
+        cards: [],
+        didMove: false,
+        didSave: false,
+        isValid: false,
+        skippedCount: 0
+      };
+    }
+
+    const isSameDeck = sourceDeck === targetDeck || (
+      hasStableId(sourceDeck.id) &&
+      sourceDeck.id === targetDeck.id
+    );
+    if (isSameDeck) {
+      sourceDeck.cards.splice(sourceCardIndex, 1, normalizedCard);
+
+      return {
+        card: normalizedCard,
+        cards: [normalizedCard],
+        didMove: false,
+        didSave: true,
+        isValid: true,
+        skippedCount: 0
+      };
+    }
+
+    const editedFingerprint = cardFingerprint(normalizedCard);
+    const targetFingerprints = new Set(targetDeck.cards.map(cardFingerprint));
+    if (targetFingerprints.has(editedFingerprint)) {
+      return {
+        card: null,
+        cards: [],
+        didMove: false,
+        didSave: false,
+        isValid: true,
+        skippedCount: 1
+      };
+    }
+
+    const targetIds = new Set(targetDeck.cards.map((card) => card.id));
+    const savedCard = targetIds.has(normalizedCard.id)
+      ? cloneCard(normalizedCard, { freshId: true })
+      : normalizedCard;
+
+    targetDeck.cards.push(savedCard);
+    sourceDeck.cards.splice(sourceCardIndex, 1);
+
+    return {
+      card: savedCard,
+      cards: [savedCard],
+      didMove: true,
+      didSave: true,
+      isValid: true,
+      skippedCount: 0
+    };
+  }
+
   function buildDeckExportFilename(deckName) {
     const baseName = normalizeText(deckName).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_");
     return `karto-${baseName || "deck"}.json`;
@@ -411,10 +576,12 @@
     createStoragePayload,
     deckFingerprint,
     mergeDecks,
+    moveCardsBetweenDecks,
     normalizeCard,
     normalizeDeck,
     normalizeStoredDecks,
     prepareDeckImport,
-    prepareLibraryImport
+    prepareLibraryImport,
+    saveEditedCardToDeck
   };
 });

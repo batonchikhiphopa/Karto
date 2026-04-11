@@ -89,65 +89,59 @@
       </section>
 
       <section id="editDeckScreen" class="screen" aria-labelledby="editDeckTitle">
-        <div class="screen-header screen-header-stack">
-          <div class="screen-header-top">
-            <div class="screen-heading">
-              <h2 id="editDeckTitle" class="screen-title" data-i18n="editDeck.title">Deck editor</h2>
-              <p class="screen-subtitle" data-i18n="editDeck.subtitle">Cards, order, and study.</p>
+        <div class="screen-header editdeck-header">
+          <div class="screen-header-top editdeck-header-top">
+            <div class="screen-heading editdeck-heading">
+              <h2 id="editDeckTitle" class="screen-title"></h2>
             </div>
-            <button
-              class="panel-close-btn"
-              id="closeEditDeckBtn"
-              type="button"
-              aria-label="Close"
-              data-i18n-aria-label="common.close"
-              data-i18n-title="common.close"
-            >
-              <span aria-hidden="true">✕</span>
-            </button>
+            <div class="editdeck-header-actions">
+              <button
+                class="icon-btn icon-btn-accent"
+                id="editDeckCreateCardBtn"
+                type="button"
+                aria-label="Create card"
+                data-i18n-aria-label="editDeck.createCard"
+                data-i18n-title="editDeck.createCard"
+              >
+                <span aria-hidden="true">+</span>
+              </button>
+              <button
+                class="icon-btn"
+                id="editDeckAddFromOtherBtn"
+                type="button"
+                aria-label="Add from another deck"
+                data-i18n-aria-label="editDeck.addFromOther"
+                data-i18n-title="editDeck.addFromOther"
+              >
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="5" y="7" width="10" height="10" rx="1.8"></rect>
+                  <path d="M9 4h8a2 2 0 0 1 2 2v8"></path>
+                  <path d="M19 13v6"></path>
+                  <path d="M16 16h6"></path>
+                </svg>
+              </button>
+              <button
+                class="icon-btn icon-btn-accent"
+                id="startDeckStudyBtn"
+                type="button"
+                aria-label="Start study"
+                data-i18n-aria-label="study.startStudy"
+                data-i18n-title="study.startStudy"
+              >
+                <span aria-hidden="true">▶</span>
+              </button>
+              <button
+                class="panel-close-btn"
+                id="closeEditDeckBtn"
+                type="button"
+                aria-label="Close"
+                data-i18n-aria-label="common.close"
+                data-i18n-title="common.close"
+              >
+                <span aria-hidden="true">✕</span>
+              </button>
+            </div>
           </div>
-          <div class="editdeck-name-row">
-            <input
-              class="editdeck-name-input"
-              id="editDeckNameInput"
-              data-i18n-placeholder="editDeck.namePlaceholder"
-              placeholder="Deck name"
-              aria-label="Deck name"
-            >
-            <button class="lib-btn lib-btn-green" id="renameDeckBtn" type="button" data-i18n="editDeck.saveName">Save</button>
-          </div>
-        </div>
-
-        <div class="lib-toolbar">
-          <button class="lib-btn lib-btn-green" id="editDeckCreateCardBtn" type="button" data-i18n="editDeck.createCard">Create card</button>
-          <button class="lib-btn" id="editDeckAddFromOtherBtn" type="button" data-i18n="editDeck.addFromOther">Add from another deck</button>
-          <button class="lib-btn" id="editDeckShareBtn" type="button" data-i18n="editDeck.share">Share deck</button>
-          <button class="lib-btn" id="editDeckImportBtn" type="button" data-i18n="editDeck.import">Import</button>
-          <input
-            class="form-input editdeck-search"
-            id="editDeckSearchInput"
-            data-i18n-placeholder="editDeck.searchPlaceholder"
-            placeholder="Search cards..."
-            aria-label="Search cards"
-          >
-        </div>
-
-        <div class="bulk-toolbar" id="bulkToolbar">
-          <div class="bulk-summary" id="bulkSummary" data-i18n="bulk.noneSelected">No cards selected</div>
-          <button class="lib-btn" id="selectAllCardsBtn" type="button" data-i18n="bulk.selectAll">Select all</button>
-          <select class="form-input bulk-move-select" id="bulkMoveDeckSelect" aria-label="Move selected cards to deck"></select>
-          <button class="lib-btn" id="bulkMoveBtn" type="button" data-i18n="bulk.moveSelected">Move selected</button>
-          <button class="lib-btn lib-btn-danger" id="bulkDeleteBtn" type="button" data-i18n="bulk.deleteSelected">Delete selected</button>
-        </div>
-
-        <div class="study-toolbar">
-          <label class="form-label" for="studyModeSelect" data-i18n="study.startModeLabel">Study mode</label>
-          <select class="form-input study-mode-select" id="studyModeSelect">
-            <option value="all" data-i18n="study.modeAll">All cards</option>
-            <option value="new" data-i18n="study.modeNew">New cards only</option>
-            <option value="review" data-i18n="study.modeReview">Review</option>
-          </select>
-          <button class="lib-btn lib-btn-green" id="startDeckStudyBtn" type="button" data-i18n="study.startStudy">Start study</button>
         </div>
 
         <div class="card-list" id="editDeckCardList"></div>
@@ -157,7 +151,7 @@
         <div class="screen-header">
           <div class="screen-heading">
             <h2 id="settingsTitle" class="screen-title" data-i18n="settings.title">Settings</h2>
-            <p class="screen-subtitle" data-i18n="settings.subtitle">Language, desktop, layout, theme, and history.</p>
+            <p class="screen-subtitle" data-i18n="settings.subtitle">Language, desktop, layout, and theme.</p>
           </div>
         </div>
 
@@ -201,14 +195,9 @@
 
             <div class="settings-actions">
               <button class="lib-btn lib-btn-green" id="saveSettingsBtn" type="button" data-i18n="settings.saveChanges">Save changes</button>
-              <button class="lib-btn lib-btn-danger" id="resetBtn" type="button" data-i18n="settings.reset">Reset all data</button>
             </div>
           </div>
 
-          <div class="settings-panel">
-            <h3 class="settings-section-title" data-i18n="settings.sessionHistory">Session history</h3>
-            <div class="session-history-list" id="sessionHistoryList"></div>
-          </div>
         </div>
       </section>
 
@@ -257,7 +246,12 @@
                     data-i18n-aria-label="cardForm.uploadImage"
                     data-i18n-title="cardForm.uploadImage"
                   >
-                    <span aria-hidden="true">⤴</span>
+                    <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="4" y="5" width="16" height="14" rx="2"></rect>
+                      <path d="M8 16l3-3 2 2 2-3 3 4"></path>
+                      <path d="M12 11V3"></path>
+                      <path d="M9 6l3-3 3 3"></path>
+                    </svg>
                   </button>
                 </div>
               </div>
@@ -370,33 +364,6 @@
 
               <button class="lib-btn lib-btn-green" id="saveCardBtn" type="button" data-i18n="cardForm.save">Save card</button>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="createDeckScreen" class="screen" aria-labelledby="createDeckTitle">
-        <div class="screen-header screen-header-closeable">
-          <div class="screen-heading">
-            <h2 id="createDeckTitle" class="screen-title" data-i18n="createDeck.title">Create deck</h2>
-            <p class="screen-subtitle" data-i18n="createDeck.subtitle">Just a name.</p>
-          </div>
-          <button
-            class="panel-close-btn"
-            id="closeCreateDeckBtn"
-            type="button"
-            aria-label="Close"
-            data-i18n-aria-label="common.close"
-            data-i18n-title="common.close"
-          >
-            <span aria-hidden="true">✕</span>
-          </button>
-        </div>
-
-        <div class="form-inner form-inner-compact">
-          <div class="form-body">
-            <label class="form-label" for="newDeckNameInput" data-i18n="createDeck.nameLabel">Name</label>
-            <input class="form-input" id="newDeckNameInput" data-i18n-placeholder="createDeck.namePlaceholder" placeholder="Deck name">
-            <button class="lib-btn lib-btn-green" id="saveDeckBtn" type="button" data-i18n="createDeck.save">Create</button>
           </div>
         </div>
       </section>

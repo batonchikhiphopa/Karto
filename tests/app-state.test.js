@@ -105,6 +105,58 @@ function testBrowserHomeGridColumnsPersistToStorage() {
   });
 }
 
+function testRoundHistoryDropsLegacyEntriesAndLimitsPerDeck() {
+  const studySessions = [
+    {
+      deckId: "deck_a",
+      deckName: "A",
+      mode: "all",
+      reviewed: 12,
+      correct: 10,
+      wrong: 2,
+      unsure: 0,
+      percentCorrect: 83,
+      finishedAt: "2026-04-01T12:00:00.000Z"
+    },
+    ...Array.from({ length: 6 }, (_, index) => ({
+      deckId: "deck_a",
+      deckName: "A",
+      completedRounds: index + 1,
+      finishedAt: `2026-04-0${index + 1}T12:00:00.000Z`
+    })),
+    {
+      deckId: "deck_b",
+      deckName: "B",
+      completedRounds: 7,
+      finishedAt: "2026-04-02T12:00:00.000Z"
+    }
+  ];
+
+  withMockedAppStateRuntime({
+    storageValues: {
+      "karto.studySessions": JSON.stringify(studySessions)
+    }
+  }, ({ createAppState, STORAGE_KEYS, storage }) => {
+    const store = createAppState();
+    store.load();
+
+    assert.equal(store.state.studySessions.filter((session) => session.deckId === "deck_a").length, 5);
+    assert.equal(store.getCompletedRoundsForDeck("deck_a"), 20);
+    assert.equal(store.getCompletedRoundsForDeck("deck_b"), 7);
+    assert.equal(JSON.parse(storage.getItem(STORAGE_KEYS.studySessions)).length, 6);
+
+    store.recordStudySession({
+      deckId: "deck_a",
+      deckName: "A",
+      completedRounds: 8,
+      finishedAt: "2026-04-07T12:00:00.000Z"
+    });
+
+    assert.equal(store.state.studySessions.filter((session) => session.deckId === "deck_a").length, 5);
+    assert.equal(store.getCompletedRoundsForDeck("deck_a"), 26);
+  });
+}
+
 function testDesktopLoadMigratesLegacyStorageAndClearsBrowserKeys() {
   const captured = {
     migrationPayload: null
@@ -255,6 +307,7 @@ function testDesktopPersistenceDelegatesSnapshotAndLanguageSaves() {
 }
 
 testBrowserHomeGridColumnsPersistToStorage();
+testRoundHistoryDropsLegacyEntriesAndLimitsPerDeck();
 testDesktopLoadMigratesLegacyStorageAndClearsBrowserKeys();
 testDesktopPersistenceDelegatesSnapshotAndLanguageSaves();
 

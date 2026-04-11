@@ -103,12 +103,7 @@ function testSettingsProgressAndSessionPersistence() {
     const sessions = repository.recordStudySession({
       deckId: "deck_1",
       deckName: "Deck 1",
-      mode: "all",
-      reviewed: 10,
-      correct: 9,
-      wrong: 1,
-      unsure: 0,
-      percentCorrect: 90,
+      completedRounds: 2,
       finishedAt: "2026-04-09T12:00:00.000Z"
     });
 
@@ -120,6 +115,37 @@ function testSettingsProgressAndSessionPersistence() {
     assert.equal(appData.homeGridColumns, "3");
     assert.equal(appData.studyProgress.card_1.correctCount, 1);
     assert.equal(appData.studySessions[0].deckName, "Deck 1");
+    assert.equal(appData.studySessions[0].completedRounds, 2);
+  });
+}
+
+function testStudyRoundHistoryIsLimitedPerDeck() {
+  withRepository((repository) => {
+    for (let index = 1; index <= 6; index += 1) {
+      repository.recordStudySession({
+        deckId: "deck_a",
+        deckName: "A",
+        completedRounds: index,
+        finishedAt: `2026-04-0${index}T12:00:00.000Z`
+      });
+    }
+
+    repository.recordStudySession({
+      deckId: "deck_b",
+      deckName: "B",
+      completedRounds: 9,
+      finishedAt: "2026-04-07T12:00:00.000Z"
+    });
+
+    const appData = repository.loadAppData();
+    assert.equal(appData.studySessions.filter((session) => session.deckId === "deck_a").length, 5);
+    assert.deepEqual(
+      appData.studySessions
+        .filter((session) => session.deckId === "deck_a")
+        .map((session) => session.completedRounds),
+      [6, 5, 4, 3, 2]
+    );
+    assert.equal(appData.studySessions.find((session) => session.deckId === "deck_b").completedRounds, 9);
   });
 }
 
@@ -170,6 +196,7 @@ function testLegacyImportAndReset() {
     assert.equal(importResult.imported, true);
     assert.equal(importResult.appData.decks.length, 1);
     assert.equal(importResult.appData.languagePreference, "ru");
+    assert.equal(importResult.appData.studySessions.length, 0);
 
     const cleared = repository.clearAllData({ includeLanguage: false });
     assert.equal(cleared.decks.length, 0);
@@ -207,6 +234,7 @@ function testRestoreAppStateSnapshot() {
 testCrudAndLoadAppData();
 testSaveDeckSnapshotPreservesOrder();
 testSettingsProgressAndSessionPersistence();
+testStudyRoundHistoryIsLimitedPerDeck();
 testLegacyImportAndReset();
 testRestoreAppStateSnapshot();
 

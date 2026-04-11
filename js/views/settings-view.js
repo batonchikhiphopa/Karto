@@ -8,7 +8,6 @@
     const windowModeSelect = document.getElementById("windowModeSelect");
     const homeGridColumnsSelect = document.getElementById("homeGridColumnsSelect");
     const saveSettingsBtn = document.getElementById("saveSettingsBtn");
-    const sessionHistoryList = document.getElementById("sessionHistoryList");
     const desktopApi = ctx.desktopApi && ctx.desktopApi.isDesktop ? ctx.desktopApi : null;
     const draftState = {
       language: "en",
@@ -180,50 +179,9 @@
       }
     }
 
-    function renderSessionHistory() {
-      clearElement(sessionHistoryList);
-
-      if (ctx.state.studySessions.length === 0) {
-        sessionHistoryList.appendChild(ctx.createEmptyMessage(t("settings.emptySessions")));
-        return;
-      }
-
-      const formatter = new Intl.DateTimeFormat(getCurrentLanguage(), {
-        dateStyle: "medium",
-        timeStyle: "short"
-      });
-
-      ctx.state.studySessions.forEach((session) => {
-        const percent = typeof session.percentCorrect === "number" ? session.percentCorrect : 0;
-        const finishedAt = session.finishedAt ? formatter.format(new Date(session.finishedAt)) : "";
-
-        sessionHistoryList.appendChild(createElement("div", {
-          className: "session-history-item",
-          children: [
-            createElement("div", {
-              className: "session-history-title",
-              text: `${session.deckName || "Deck"} • ${finishedAt}`
-            }),
-            createElement("div", {
-              className: "session-history-meta",
-              text: `${t("study.sessionEntry", {
-                reviewed: session.reviewed || 0,
-                percent
-              })} • ${t(
-                session.mode === "new" ? "study.modeNew" :
-                session.mode === "review" ? "study.modeReview" :
-                "study.modeAll"
-              )}`
-            })
-          ]
-        }));
-      });
-    }
-
     function render() {
       ensureDraftInitialized();
       renderControls();
-      renderSessionHistory();
 
       if (desktopApi && windowModeRow) {
         void syncDesktopPreferences();
@@ -260,27 +218,6 @@
         void saveChanges();
       });
     }
-
-    document.getElementById("resetBtn").addEventListener("click", () => {
-      const snapshot = ctx.store.createSnapshot();
-      ctx.store.clearAllData({ includeLanguage: true });
-      setLanguage(ctx.state.languagePreference, {
-        persist: false,
-        refresh: false,
-        storage: null
-      });
-      discardDraft();
-      ctx.refreshAll();
-
-      ctx.toast.info(t("alerts.confirmReset"), {
-        actionLabel: t("common.undo"),
-        duration: 6000,
-        onAction: () => {
-          discardDraft();
-          ctx.restoreSnapshot(snapshot);
-        }
-      });
-    });
 
     return {
       discardDraft,

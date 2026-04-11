@@ -15,7 +15,7 @@ const {
 const DEFAULT_THEME_PREFERENCE = "system";
 const DEFAULT_HOME_GRID_COLUMNS = "auto";
 const DEFAULT_LANGUAGE = "en";
-const MAX_STUDY_SESSIONS = 20;
+const MAX_STUDY_SESSIONS_PER_DECK = 5;
 
 const SETTINGS_KEYS = Object.freeze({
   language: "language",
@@ -84,19 +84,31 @@ function normalizeStudySession(entry) {
     return null;
   }
 
+  const deckId = typeof entry.deckId === "string" ? entry.deckId.trim() : "";
+  if (!deckId || !Object.prototype.hasOwnProperty.call(entry, "completedRounds")) {
+    return null;
+  }
+
+  const completedRounds = Number.isFinite(Number(entry.completedRounds))
+    ? Math.max(0, Math.round(Number(entry.completedRounds)))
+    : null;
+
+  if (completedRounds === null) {
+    return null;
+  }
+
   return {
-    deckId: typeof entry.deckId === "string" && entry.deckId ? entry.deckId : null,
+    deckId,
     deckName: typeof entry.deckName === "string" && entry.deckName ? entry.deckName : "Deck",
-    mode: typeof entry.mode === "string" && entry.mode ? entry.mode : "all",
-    reviewed: Number.isFinite(Number(entry.reviewed)) ? Math.max(0, Math.round(Number(entry.reviewed))) : 0,
-    correct: Number.isFinite(Number(entry.correct)) ? Math.max(0, Math.round(Number(entry.correct))) : 0,
-    wrong: Number.isFinite(Number(entry.wrong)) ? Math.max(0, Math.round(Number(entry.wrong))) : 0,
-    unsure: Number.isFinite(Number(entry.unsure)) ? Math.max(0, Math.round(Number(entry.unsure))) : 0,
-    percentCorrect: Number.isFinite(Number(entry.percentCorrect))
-      ? Math.max(0, Math.round(Number(entry.percentCorrect)))
-      : 0,
+    completedRounds,
     finishedAt: typeof entry.finishedAt === "string" && entry.finishedAt ? entry.finishedAt : new Date().toISOString()
   };
+}
+
+function compareStudySessionsByFinishedAtDesc(left, right) {
+  const leftTime = Date.parse(left.finishedAt) || 0;
+  const rightTime = Date.parse(right.finishedAt) || 0;
+  return rightTime - leftTime;
 }
 
 function normalizeStudySessions(value) {
@@ -104,10 +116,21 @@ function normalizeStudySessions(value) {
     return [];
   }
 
+  const countsByDeckId = new Map();
+
   return value
     .map(normalizeStudySession)
     .filter(Boolean)
-    .slice(0, MAX_STUDY_SESSIONS);
+    .sort(compareStudySessionsByFinishedAtDesc)
+    .filter((session) => {
+      const count = countsByDeckId.get(session.deckId) || 0;
+      if (count >= MAX_STUDY_SESSIONS_PER_DECK) {
+        return false;
+      }
+
+      countsByDeckId.set(session.deckId, count + 1);
+      return true;
+    });
 }
 
 function hasAnyLegacyData(payload) {
@@ -186,13 +209,22 @@ function createSqliteRepository(options = {}) {
       unsure INTEGER NOT NULL,
       percent_correct INTEGER NOT NULL,
       finished_at TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      completed_rounds INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE INDEX IF NOT EXISTS idx_decks_sort ON decks(sort_index, created_at, id);
     CREATE INDEX IF NOT EXISTS idx_cards_deck_sort ON cards(deck_id, sort_index, created_at, id);
     CREATE INDEX IF NOT EXISTS idx_sessions_finished ON study_sessions(finished_at, created_at, id);
   `);
+
+  const sessionColumns = db.prepare("PRAGMA table_info(study_sessions)").all();
+  if (!sessionColumns.some((column) => column.name === "completed_rounds")) {
+    db.exec(`
+      ALTER TABLE study_sessions ADD COLUMN completed_rounds INTEGER NOT NULL DEFAULT 0;
+      DELETE FROM study_sessions;
+    `);
+  }
 
   const statements = {
     deleteAllDecks: db.prepare("DELETE FROM decks"),
@@ -263,10 +295,10 @@ function createSqliteRepository(options = {}) {
         unsure,
         percent_correct AS percentCorrect,
         finished_at AS finishedAt,
-        created_at AS createdAt
+        created_at AS createdAt,
+        completed_rounds AS completedRounds
       FROM study_sessions
       ORDER BY finished_at DESC, created_at DESC, id DESC
-      LIMIT ${MAX_STUDY_SESSIONS}
     `),
     insertCard: db.prepare(`
       INSERT INTO cards (
@@ -326,8 +358,9 @@ function createSqliteRepository(options = {}) {
         unsure,
         percent_correct,
         finished_at,
-        created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at,
+        completed_rounds
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     maxDeckSortIndex: db.prepare("SELECT COALESCE(MAX(sort_index), -1) AS sortIndex FROM decks"),
     maxCardSortIndex: db.prepare("SELECT COALESCE(MAX(sort_index), -1) AS sortIndex FROM cards WHERE deck_id = ?"),
@@ -335,9 +368,16 @@ function createSqliteRepository(options = {}) {
       DELETE FROM study_sessions
       WHERE id NOT IN (
         SELECT id
-        FROM study_sessions
-        ORDER BY finished_at DESC, created_at DESC, id DESC
-        LIMIT ${MAX_STUDY_SESSIONS}
+        FROM (
+          SELECT
+            id,
+            ROW_NUMBER() OVER (
+              PARTITION BY deck_id
+              ORDER BY finished_at DESC, created_at DESC, id DESC
+            ) AS row_number
+          FROM study_sessions
+        )
+        WHERE row_number <= ${MAX_STUDY_SESSIONS_PER_DECK}
       )
     `),
     setSetting: db.prepare(`
@@ -472,14 +512,15 @@ function createSqliteRepository(options = {}) {
         createId("session"),
         session.deckId,
         session.deckName,
-        session.mode,
-        session.reviewed,
-        session.correct,
-        session.wrong,
-        session.unsure,
-        session.percentCorrect,
+        "all",
+        0,
+        0,
+        0,
+        0,
+        0,
         session.finishedAt,
-        now
+        now,
+        session.completedRounds
       );
     });
 
@@ -597,14 +638,15 @@ function createSqliteRepository(options = {}) {
       createId("session"),
       session.deckId,
       session.deckName,
-      session.mode,
-      session.reviewed,
-      session.correct,
-      session.wrong,
-      session.unsure,
-      session.percentCorrect,
+      "all",
+      0,
+      0,
+      0,
+      0,
+      0,
       session.finishedAt,
-      now
+      now,
+      session.completedRounds
     );
     statements.pruneStudySessions.run();
     return loadStudySessions();

@@ -56,12 +56,21 @@ function testNewUiStringsAreLocalized() {
 
   assert.equal(t("actions.share"), "Поделиться");
   assert.equal(t("cardForm.subtitle"), "Лицевая сторона, ответ и картинка.");
+  assert.equal(t("editDeck.subtitle"), "Карточки и учёба.");
+  assert.equal(t("editDeck.draftHint"), "Назови колоду, чтобы начать добавлять карточки.");
   assert.equal(t("cardForm.searchImages"), "Найти картинки");
   assert.equal(t("settings.windowMode"), "Режим окна");
+  assert.equal(t("settings.subtitle"), "Язык, окно, раскладка и тема.");
   assert.equal(t("settings.homeTilesPerRow"), "Тайлов на главной в ряд");
   assert.equal(t("settings.saveChanges"), "Сохранить изменения");
   assert.equal(t("sidebar.quitApp"), "Выйти");
   assert.equal(t("alerts.settingsSaved"), "Настройки сохранены.");
+  assert.equal(t("actions.moveCard"), "Переместить карточку");
+  assert.equal(t("editDeck.moveConfirm"), "Переместить");
+  assert.equal(
+    t("alerts.cardMoveSkipped", { deckName: "Deutsch" }),
+    "Карточка не перемещена. В колоде \"Deutsch\" уже есть дубликат."
+  );
 }
 
 function testResolveInitialLanguageCanBypassStorage() {

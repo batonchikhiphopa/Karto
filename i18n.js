@@ -38,6 +38,7 @@
         createCard: "Create card",
         edit: "Edit",
         editCard: "Edit card",
+        moveCard: "Move card",
         mergeDeck: "Merge deck",
         renameDeck: "Rename deck",
         importDecks: "Import decks",
@@ -67,7 +68,7 @@
       },
       editDeck: {
         title: "Deck editor",
-        subtitle: "Cards, order, and study.",
+        subtitle: "Cards and study.",
         createCard: "Create card",
         addFromOther: "Add from another deck",
         share: "Share deck",
@@ -75,9 +76,13 @@
         exportCsv: "Export CSV",
         import: "Import",
         empty: "No cards yet. Create your first one!",
+        draftHint: "Name the deck to start adding cards.",
         namePlaceholder: "Deck name",
         saveName: "Save",
-        searchPlaceholder: "Search cards..."
+        searchPlaceholder: "Search cards...",
+        moveToDeckLabel: "Move to deck",
+        moveConfirm: "Move",
+        moveCancel: "Cancel"
       },
       bulk: {
         noneSelected: "No cards selected",
@@ -89,9 +94,8 @@
       },
       settings: {
         title: "Settings",
-        subtitle: "Language, desktop, layout, theme, and history.",
+        subtitle: "Language, desktop, layout, and theme.",
         language: "Interface language",
-        reset: "Reset all data",
         languageOptionEn: "English",
         languageOptionDe: "Deutsch",
         languageOptionRu: "Русский",
@@ -107,9 +111,7 @@
         homeTiles2: "2",
         homeTiles3: "3",
         homeTiles4: "4",
-        saveChanges: "Save changes",
-        sessionHistory: "Session history",
-        emptySessions: "No study sessions yet."
+        saveChanges: "Save changes"
       },
       cardForm: {
         titleCreate: "Create card",
@@ -152,7 +154,8 @@
         subtitle: "Just a name.",
         nameLabel: "Name",
         namePlaceholder: "Deck name",
-        save: "Create"
+        save: "Create",
+        saveAndEdit: "Create and edit deck"
       },
       merge: {
         title: "Merge decks",
@@ -184,9 +187,7 @@
         startModeLabel: "Study mode",
         modeAll: "All cards",
         modeNew: "New cards only",
-        modeReview: "Review",
-        stats: "{reviewed} reviewed • {percent}% correct • mode: {mode}",
-        sessionEntry: "{reviewed} reviewed • {percent}% correct"
+        modeReview: "Review"
       },
       alerts: {
         invalidJson: "The file is corrupted or has an invalid format.",
@@ -208,13 +209,13 @@
         chooseTwoDecks: "Choose at least 2 decks.",
         noOtherDecks: "No other decks.",
         cardAdded: "Card \"{frontText}\" added.",
-        confirmReset: "All data was cleared.",
         emptyDeckStudy: "This deck has no cards yet.",
         deckDeleted: "Deck \"{name}\" deleted.",
         cardDeleted: "Card deleted.",
         cardsDeleted: "Deleted {count} cards.",
         cardsMoved: "Moved {added} cards. Skipped duplicates: {skipped}.",
-        resetUndone: "Data restored.",
+        cardMoved: "Card moved to \"{deckName}\".",
+        cardMoveSkipped: "Card was not moved. A duplicate already exists in \"{deckName}\".",
         deckCreated: "Deck created.",
         cardSaved: "Card saved.",
         invalidImageUrl: "Use an http(s) or data:image URL.",
@@ -258,6 +259,7 @@
         createCard: "Создать карточку",
         edit: "Изменить",
         editCard: "Изменить карточку",
+        moveCard: "Переместить карточку",
         mergeDeck: "Объединить колоду",
         renameDeck: "Переименовать колоду",
         importDecks: "Импорт колод",
@@ -289,7 +291,7 @@
       },
       editDeck: {
         title: "Редактор колоды",
-        subtitle: "Карточки, порядок и учёба.",
+        subtitle: "Карточки и учёба.",
         createCard: "Создать карточку",
         addFromOther: "Добавить из другой колоды",
         share: "Поделиться колодой",
@@ -297,9 +299,13 @@
         exportCsv: "Экспорт CSV",
         import: "Импорт",
         empty: "Карточек пока нет. Создай первую!",
+        draftHint: "Назови колоду, чтобы начать добавлять карточки.",
         namePlaceholder: "Название колоды",
         saveName: "Сохранить",
-        searchPlaceholder: "Поиск карточек..."
+        searchPlaceholder: "Поиск карточек...",
+        moveToDeckLabel: "Переместить в колоду",
+        moveConfirm: "Переместить",
+        moveCancel: "Отмена"
       },
       bulk: {
         noneSelected: "Карточки не выбраны",
@@ -311,9 +317,8 @@
       },
       settings: {
         title: "Настройки",
-        subtitle: "Язык, окно, раскладка, тема и история.",
+        subtitle: "Язык, окно, раскладка и тема.",
         language: "Язык интерфейса",
-        reset: "Сбросить все данные",
         languageOptionEn: "English",
         languageOptionDe: "Deutsch",
         languageOptionRu: "Русский",
@@ -329,9 +334,7 @@
         homeTiles2: "2",
         homeTiles3: "3",
         homeTiles4: "4",
-        saveChanges: "Сохранить изменения",
-        sessionHistory: "История сессий",
-        emptySessions: "Учебных сессий пока нет."
+        saveChanges: "Сохранить изменения"
       },
       cardForm: {
         titleCreate: "Создать карточку",
@@ -374,7 +377,8 @@
         subtitle: "Только название.",
         nameLabel: "Название",
         namePlaceholder: "Название колоды",
-        save: "Создать"
+        save: "Создать",
+        saveAndEdit: "Создать и перейти к редактированию колоды"
       },
       merge: {
         title: "Объединить колоды",
@@ -406,9 +410,7 @@
         startModeLabel: "Режим изучения",
         modeAll: "Все карточки",
         modeNew: "Только новые",
-        modeReview: "Повторение",
-        stats: "Просмотрено: {reviewed} • {percent}% верно • режим: {mode}",
-        sessionEntry: "Просмотрено: {reviewed} • {percent}% верно"
+        modeReview: "Повторение"
       },
       alerts: {
         invalidJson: "Файл повреждён или имеет неверный формат.",
@@ -430,13 +432,13 @@
         chooseTwoDecks: "Выбери минимум две колоды.",
         noOtherDecks: "Других колод нет.",
         cardAdded: "Карточка \"{frontText}\" добавлена.",
-        confirmReset: "Все данные очищены.",
         emptyDeckStudy: "В этой колоде пока нет карточек.",
         deckDeleted: "Колода \"{name}\" удалена.",
         cardDeleted: "Карточка удалена.",
         cardsDeleted: "Удалено карточек: {count}.",
         cardsMoved: "Перемещено карточек: {added}. Пропущено дубликатов: {skipped}.",
-        resetUndone: "Данные восстановлены.",
+        cardMoved: "Карточка перемещена в колоду \"{deckName}\".",
+        cardMoveSkipped: "Карточка не перемещена. В колоде \"{deckName}\" уже есть дубликат.",
         deckCreated: "Колода создана.",
         cardSaved: "Карточка сохранена.",
         invalidImageUrl: "Используй URL формата http(s) или data:image.",
@@ -477,6 +479,7 @@
         createCard: "Karte erstellen",
         edit: "Bearbeiten",
         editCard: "Karte bearbeiten",
+        moveCard: "Karte verschieben",
         mergeDeck: "Deck zusammenführen",
         renameDeck: "Deck umbenennen",
         importDecks: "Decks importieren",
@@ -506,7 +509,7 @@
       },
       editDeck: {
         title: "Deck-Editor",
-        subtitle: "Karten, Reihenfolge und Lernen.",
+        subtitle: "Karten und Lernen.",
         createCard: "Karte erstellen",
         addFromOther: "Aus anderem Deck hinzufügen",
         share: "Deck teilen",
@@ -514,9 +517,13 @@
         exportCsv: "CSV exportieren",
         import: "Importieren",
         empty: "Noch keine Karten. Erstelle deine erste!",
+        draftHint: "Benenne das Deck, um Karten hinzuzufügen.",
         namePlaceholder: "Deckname",
         saveName: "Speichern",
-        searchPlaceholder: "Karten suchen..."
+        searchPlaceholder: "Karten suchen...",
+        moveToDeckLabel: "In Deck verschieben",
+        moveConfirm: "Verschieben",
+        moveCancel: "Abbrechen"
       },
       bulk: {
         noneSelected: "Keine Karten ausgewählt",
@@ -528,9 +535,8 @@
       },
       settings: {
         title: "Einstellungen",
-        subtitle: "Sprache, Fenster, Layout, Thema und Verlauf.",
+        subtitle: "Sprache, Fenster, Layout und Thema.",
         language: "Sprache der Oberfläche",
-        reset: "Alle Daten zurücksetzen",
         languageOptionEn: "English",
         languageOptionDe: "Deutsch",
         languageOptionRu: "Русский",
@@ -546,9 +552,7 @@
         homeTiles2: "2",
         homeTiles3: "3",
         homeTiles4: "4",
-        saveChanges: "Änderungen speichern",
-        sessionHistory: "Sitzungsverlauf",
-        emptySessions: "Noch keine Lernsitzungen."
+        saveChanges: "Änderungen speichern"
       },
       cardForm: {
         titleCreate: "Karte erstellen",
@@ -591,7 +595,8 @@
         subtitle: "Nur ein Name.",
         nameLabel: "Name",
         namePlaceholder: "Deckname",
-        save: "Erstellen"
+        save: "Erstellen",
+        saveAndEdit: "Erstellen und Deck bearbeiten"
       },
       merge: {
         title: "Decks zusammenführen",
@@ -623,9 +628,7 @@
         startModeLabel: "Lernmodus",
         modeAll: "Alle Karten",
         modeNew: "Nur neue Karten",
-        modeReview: "Wiederholen",
-        stats: "{reviewed} gelernt • {percent}% richtig • Modus: {mode}",
-        sessionEntry: "{reviewed} gelernt • {percent}% richtig"
+        modeReview: "Wiederholen"
       },
       alerts: {
         invalidJson: "Die Datei ist beschädigt oder hat ein ungültiges Format.",
@@ -647,13 +650,13 @@
         chooseTwoDecks: "Wähle mindestens zwei Decks.",
         noOtherDecks: "Keine anderen Decks vorhanden.",
         cardAdded: "Karte \"{frontText}\" hinzugefügt.",
-        confirmReset: "Alle Daten wurden gelöscht.",
         emptyDeckStudy: "Dieses Deck hat noch keine Karten.",
         deckDeleted: "Deck \"{name}\" gelöscht.",
         cardDeleted: "Karte gelöscht.",
         cardsDeleted: "{count} Karten gelöscht.",
         cardsMoved: "{added} Karten verschoben. Übersprungene Duplikate: {skipped}.",
-        resetUndone: "Daten wiederhergestellt.",
+        cardMoved: "Karte nach \"{deckName}\" verschoben.",
+        cardMoveSkipped: "Die Karte wurde nicht verschoben. In \"{deckName}\" existiert bereits ein Duplikat.",
         deckCreated: "Deck erstellt.",
         cardSaved: "Karte gespeichert.",
         invalidImageUrl: "Verwende eine URL mit http(s) oder data:image.",
