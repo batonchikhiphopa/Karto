@@ -6,6 +6,7 @@
     language: "language",
     theme: "karto.theme",
     homeGridColumns: "karto.homeGridColumns",
+    autoGermanArticle: "karto.autoGermanArticle",
     studyProgress: "karto.studyProgress",
     studySessions: "karto.studySessions"
   };
@@ -238,6 +239,7 @@
       languagePreference: resolveLanguagePreference(null),
       themePreference: normalizeThemePreference(storage?.getItem?.(STORAGE_KEYS.theme)),
       homeGridColumns: normalizeHomeGridColumns(storage?.getItem?.(STORAGE_KEYS.homeGridColumns)),
+      autoGermanArticle: safeParse(storage?.getItem?.(STORAGE_KEYS.autoGermanArticle), true),
       openMoveCardId: null,
       pendingMoveDeckId: ""
     };
@@ -257,6 +259,7 @@
         languagePreference: normalizeLanguagePreference(storage?.getItem?.(STORAGE_KEYS.language)),
         themePreference: normalizeThemePreference(storage?.getItem?.(STORAGE_KEYS.theme)),
         homeGridColumns: normalizeHomeGridColumns(storage?.getItem?.(STORAGE_KEYS.homeGridColumns)),
+        autoGermanArticle: safeParse(storage?.getItem?.(STORAGE_KEYS.autoGermanArticle), true),
         studyProgress: normalizeLoadedStudyProgress(safeParse(storage?.getItem?.(STORAGE_KEYS.studyProgress), {})),
         studySessions: normalizeLoadedStudySessions(safeParse(storage?.getItem?.(STORAGE_KEYS.studySessions), []))
       };
@@ -294,6 +297,7 @@
         ),
         themePreference: normalizeThemePreference(storage?.getItem?.(STORAGE_KEYS.theme)),
         homeGridColumns: normalizeHomeGridColumns(storage?.getItem?.(STORAGE_KEYS.homeGridColumns)),
+        autoGermanArticle: safeParse(storage?.getItem?.(STORAGE_KEYS.autoGermanArticle), true),
         studyProgress: normalizeLoadedStudyProgress(safeParse(storage?.getItem?.(STORAGE_KEYS.studyProgress), {})),
         studySessions: normalizeLoadedStudySessions(safeParse(storage?.getItem?.(STORAGE_KEYS.studySessions), []))
       };
@@ -337,6 +341,7 @@
       state.languagePreference = resolveLanguagePreference(payload.languagePreference);
       state.themePreference = normalizeThemePreference(payload.themePreference);
       state.homeGridColumns = normalizeHomeGridColumns(payload.homeGridColumns);
+      state.autoGermanArticle = payload.autoGermanArticle !== false;
       state.studyProgress = normalizeLoadedStudyProgress(payload.studyProgress);
       state.studySessions = normalizeLoadedStudySessions(payload.studySessions);
 
@@ -367,6 +372,16 @@
         desktopPersistence.saveSettingSync("homeGridColumns", state.homeGridColumns);
       } else {
         storage?.setItem?.(STORAGE_KEYS.homeGridColumns, state.homeGridColumns);
+      }
+    }
+
+    function setAutoGermanArticle(value) {
+      state.autoGermanArticle = value !== false;
+
+      if (desktopPersistence) {
+        desktopPersistence.saveSettingSync("autoGermanArticle", state.autoGermanArticle);
+      } else {
+        storage?.setItem?.(STORAGE_KEYS.autoGermanArticle, JSON.stringify(state.autoGermanArticle));
       }
     }
 
@@ -425,6 +440,7 @@
         studySessions: JSON.parse(JSON.stringify(state.studySessions)),
         themePreference: state.themePreference,
         homeGridColumns: state.homeGridColumns,
+        autoGermanArticle: state.autoGermanArticle,
         languagePreference: state.languagePreference
       };
     }
@@ -436,6 +452,7 @@
         studySessions: Array.isArray(snapshot.studySessions) ? snapshot.studySessions : [],
         themePreference: snapshot.themePreference || "system",
         homeGridColumns: snapshot.homeGridColumns || "auto",
+        autoGermanArticle: snapshot.autoGermanArticle !== false,
         languagePreference: snapshot.languagePreference || snapshot.language || resolveLanguagePreference(null)
       };
 
@@ -446,6 +463,7 @@
         state.studySessions = normalizeLoadedStudySessions(restoredData.studySessions);
         state.themePreference = normalizeThemePreference(restoredData.themePreference);
         state.homeGridColumns = normalizeHomeGridColumns(restoredData.homeGridColumns);
+        state.autoGermanArticle = restoredData.autoGermanArticle !== false;
         state.languagePreference = resolveLanguagePreference(restoredData.languagePreference);
       } else {
         state.decks = root.normalizeStoredDecks(nextSnapshot.decks);
@@ -459,6 +477,7 @@
 
         setThemePreference(nextSnapshot.themePreference);
         setHomeGridColumns(nextSnapshot.homeGridColumns);
+        setAutoGermanArticle(nextSnapshot.autoGermanArticle);
         setLanguagePreference(nextSnapshot.languagePreference);
       }
 
@@ -493,6 +512,7 @@
         storage?.removeItem?.(STORAGE_KEYS.studySessions);
         storage?.removeItem?.(STORAGE_KEYS.theme);
         storage?.removeItem?.(STORAGE_KEYS.homeGridColumns);
+        storage?.removeItem?.(STORAGE_KEYS.autoGermanArticle);
 
         if (includeLanguage) {
           storage?.removeItem?.(STORAGE_KEYS.language);
@@ -519,6 +539,7 @@
       state.studySessions = [];
       state.themePreference = "system";
       state.homeGridColumns = "auto";
+      state.autoGermanArticle = true;
 
       applyTheme();
     }
@@ -538,6 +559,7 @@
       getCompletedRoundsForDeck: (deckId) => getCompletedRoundsForDeck(state.studySessions, deckId),
       setThemePreference,
       setHomeGridColumns,
+      setAutoGermanArticle,
       setLanguagePreference,
       recordStudyAnswer,
       recordStudySession,

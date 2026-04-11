@@ -111,6 +111,7 @@
         homeTiles2: "2",
         homeTiles3: "3",
         homeTiles4: "4",
+        autoGermanArticle: "Auto-insert article for German nouns",
         saveChanges: "Save changes"
       },
       cardForm: {
@@ -334,6 +335,7 @@
         homeTiles2: "2",
         homeTiles3: "3",
         homeTiles4: "4",
+        autoGermanArticle: "Автоподстановка артикля для немецких существительных",
         saveChanges: "Сохранить изменения"
       },
       cardForm: {
@@ -552,6 +554,7 @@
         homeTiles2: "2",
         homeTiles3: "3",
         homeTiles4: "4",
+        autoGermanArticle: "Artikel für deutsche Nomen automatisch einfügen",
         saveChanges: "Änderungen speichern"
       },
       cardForm: {

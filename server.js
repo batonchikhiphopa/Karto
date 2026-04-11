@@ -274,6 +274,33 @@ async function fetchDefinitionEnWiktionary(fetchImpl, word) {
     : { notFound: true };
 }
 
+function extractGermanArticleFromDwds($) {
+  const candidates = [
+    $("h1.dwdswb-ft-lemma").first().text().trim(),
+    $(".dwdswb-ft-lemma").first().text().trim(),
+    $("h1").first().text().trim(),
+    $(".dwdswb-lemma").first().text().trim(),
+    $(".dwdswb-headword").first().text().trim(),
+    $("title").text().trim()
+  ];
+
+  for (const text of candidates) {
+    if (!text) continue;
+
+    const commaMatch = text.match(/,\s*(der|die|das)\b/i);
+    if (commaMatch) {
+      return commaMatch[1].toLowerCase();
+    }
+
+    const directMatch = text.match(/\b(der|die|das)\b/i);
+    if (directMatch) {
+      return directMatch[1].toLowerCase();
+    }
+  }
+
+  return null;
+}
+
 async function fetchDefinitionDe(fetchImpl, word) {
   const response = await fetchImpl(`https://www.dwds.de/wb/${encodeURIComponent(word)}`, {
     headers: { "User-Agent": USER_AGENT }
@@ -296,9 +323,12 @@ async function fetchDefinitionDe(fetchImpl, word) {
     $(".dwdswb-lesart").first().text().trim()
   );
 
+  const article = extractGermanArticleFromDwds($);
+
   return definition
     ? {
       definition,
+      article,
       dictLang: "de",
       sourceId: "dwds",
       sourceLabel: "DWDS"
@@ -598,6 +628,7 @@ function createApp(options = {}) {
       if (result.definition) {
         const payload = {
           definition: result.definition,
+          article: result.article || null,
           dictLang: result.dictLang || dictLang,
           sourceId: result.sourceId || "",
           sourceLabel: result.sourceLabel || ""

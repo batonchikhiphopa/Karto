@@ -7,6 +7,7 @@
     const windowModeRow = document.getElementById("windowModeRow");
     const windowModeSelect = document.getElementById("windowModeSelect");
     const homeGridColumnsSelect = document.getElementById("homeGridColumnsSelect");
+    const autoGermanArticleCheckbox = document.getElementById("autoGermanArticleCheckbox");
     const saveSettingsBtn = document.getElementById("saveSettingsBtn");
     const desktopApi = ctx.desktopApi && ctx.desktopApi.isDesktop ? ctx.desktopApi : null;
     const draftState = {
@@ -14,6 +15,7 @@
       theme: "system",
       windowMode: "fullscreen",
       homeGridColumns: "auto",
+      autoGermanArticle: true,
       isDirty: false,
       isInitialized: false,
       isSaving: false
@@ -30,7 +32,8 @@
         language: ctx.state.languagePreference,
         theme: ctx.state.themePreference,
         windowMode: currentWindowMode,
-        homeGridColumns: ctx.state.homeGridColumns
+        homeGridColumns: ctx.state.homeGridColumns,
+        autoGermanArticle: ctx.state.autoGermanArticle ?? true
       };
     }
 
@@ -39,13 +42,16 @@
         return;
       }
 
-      saveSettingsBtn.disabled = draftState.isSaving || !draftState.isDirty;
+      saveSettingsBtn.disabled = draftState.isSaving;
     }
 
     function renderControls() {
       languageSelect.value = draftState.language;
       themeSelect.value = draftState.theme;
       homeGridColumnsSelect.value = draftState.homeGridColumns;
+      if (autoGermanArticleCheckbox) {
+      autoGermanArticleCheckbox.checked = draftState.autoGermanArticle;
+      }
 
       if (desktopApi && windowModeRow && windowModeSelect) {
         windowModeRow.hidden = false;
@@ -64,6 +70,7 @@
         draftState.language !== savedSnapshot.language ||
         draftState.theme !== savedSnapshot.theme ||
         draftState.homeGridColumns !== savedSnapshot.homeGridColumns ||
+        draftState.autoGermanArticle !== savedSnapshot.autoGermanArticle ||
         (!!desktopApi && draftState.windowMode !== savedSnapshot.windowMode);
 
       updateSaveButton();
@@ -74,6 +81,7 @@
 
       draftState.language = savedSnapshot.language;
       draftState.theme = savedSnapshot.theme;
+      draftState.autoGermanArticle = savedSnapshot.autoGermanArticle;
       draftState.windowMode = savedSnapshot.windowMode;
       draftState.homeGridColumns = savedSnapshot.homeGridColumns;
       draftState.isDirty = false;
@@ -148,7 +156,8 @@
         language: draftState.language,
         theme: draftState.theme,
         windowMode: draftState.windowMode,
-        homeGridColumns: draftState.homeGridColumns
+        homeGridColumns: draftState.homeGridColumns,
+        autoGermanArticle: draftState.autoGermanArticle
       };
 
       draftState.isSaving = true;
@@ -162,7 +171,13 @@
 
         ctx.store.setThemePreference(nextSettings.theme);
         ctx.store.setHomeGridColumns(nextSettings.homeGridColumns);
+        ctx.store.setAutoGermanArticle(nextSettings.autoGermanArticle);
         ctx.store.setLanguagePreference(nextSettings.language);
+        if (ctx.desktopApi?.saveSettingSync) {
+          ctx.desktopApi.saveSettingSync("autoGermanArticle", nextSettings.autoGermanArticle);
+        } else {
+          localStorage.setItem("autoGermanArticle", JSON.stringify(nextSettings.autoGermanArticle));
+        }
         setLanguage(nextSettings.language, {
           persist: false,
           refresh: false
@@ -206,6 +221,12 @@
     homeGridColumnsSelect.addEventListener("change", () => {
       updateDraft("homeGridColumns", homeGridColumnsSelect.value);
     });
+
+    if (autoGermanArticleCheckbox) {
+      autoGermanArticleCheckbox.addEventListener("change", () => {
+        updateDraft("autoGermanArticle", autoGermanArticleCheckbox.checked);
+      });
+    }
 
     if (windowModeSelect) {
       windowModeSelect.addEventListener("change", () => {

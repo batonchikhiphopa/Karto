@@ -362,6 +362,33 @@
       navigateBack();
     }
 
+    function hasGermanArticle(value) {
+      return /^(der|die|das)\s+/i.test(String(value || "").trim());
+    }
+
+    function isSingleWord(value) {
+      const text = String(value || "").trim();
+      return text.length > 0 && !/\s/.test(text);
+    }
+
+    function genderToArticle(gender) {
+      const normalized = String(gender || "").trim().toLowerCase();
+
+      if (["m", "maskulin", "maskulinum", "masculine"].includes(normalized)) {
+        return "der";
+      }
+
+      if (["f", "feminin", "femininum", "feminine"].includes(normalized)) {
+        return "die";
+      }
+
+      if (["n", "neutrum", "neutral", "neuter"].includes(normalized)) {
+        return "das";
+      }
+
+      return null;
+    }
+
     async function fetchDefinition(button) {
       const word = frontInput.value.trim();
       if (!word) {
@@ -384,6 +411,20 @@
 
         if (response.ok && response.data.definition) {
           backInput.value = appendLookupResult(backInput.value, response.data.definition);
+
+          const article = response.data.article;
+          const word = frontInput.value.trim();
+
+          if (
+            ctx.state.cardForm.definitionLang === "de" &&
+            ctx.state.autoGermanArticle !== false &&
+            article &&
+            !/^(der|die|das)\s/i.test(word) &&
+            !/\s/.test(word)
+          ) {
+            frontInput.value = `${article} ${word}`;
+          }
+
           return;
         }
 
@@ -395,7 +436,7 @@
         button.textContent = initialText;
       }
     }
-
+    
     async function translateText(button) {
       const text = frontInput.value.trim();
       if (!text) {
