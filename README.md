@@ -1,27 +1,35 @@
 # Karto
 
+[![CI](https://github.com/batonchikhiphopa/Karto/actions/workflows/ci.yml/badge.svg)](https://github.com/batonchikhiphopa/Karto/actions/workflows/ci.yml)
+
 A local-first desktop flashcard app built with Electron, vanilla JavaScript, and SQLite. Study vocabulary, definitions, and anything else with spaced repetition, without creating an account or syncing your data to a third-party service.
 
 ![Karto](logo.svg)
 
----
+## Screenshots
 
-## Features
+### Home
 
-- **Desktop-first app**: packaged Electron application for Windows, macOS, and Linux
-- **SQLite storage**: decks, cards, study progress, sessions, and settings are stored locally in a SQLite database
-- **Deck management**: create, rename, merge, reorder, and delete decks
-- **Card editor**: front/back text, image URL or upload, and live preview
+![Karto home screen](docs/screenshots/home.png)
+
+### Card Editor
+
+![Karto card editor](docs/screenshots/card-editor.png)
+
+### Study Mode
+
+![Karto study mode](docs/screenshots/study-mode.png)
+
+## Highlights
+
+- **Smart card editor**: front/back text, image URL or upload, live preview, and deck selection in one flow
 - **Auto-lookups**: fetch definitions and translations while editing cards
+- **German article helper**: optional auto-insert for German noun articles such as `der`, `die`, and `das`
 - **Image search**: search Unsplash images and attach them to cards
-- **Study mode**: keyboard-friendly review flow with three answer ratings
-- **Study tracking**: per-card progress plus recent study session summaries
-- **Desktop preferences**: remembers window mode and window bounds between launches
-- **Startup verification**: validates the rendered UI before revealing the app window
-- **Import / export**: JSON and CSV support for library backup and transfer
+- **Focused study mode**: keyboard-friendly review flow with three answer ratings
+- **Local-first storage**: decks, cards, study progress, sessions, settings, and desktop preferences stay on the device in SQLite
+- **Desktop app**: Electron shell with startup verification before the main window is revealed
 - **Multilingual UI**: English, Deutsch, Русский
-
----
 
 ## Getting Started
 
@@ -61,7 +69,7 @@ Without API keys, the core desktop app still works. Only the related online look
 npm start
 ```
 
-This starts the Electron app and its embedded local API server.
+This starts the Electron app and its embedded local API server. On Windows, you can also run `start.bat` from the project folder.
 
 ### Run Only The Local API Server
 
@@ -71,11 +79,7 @@ npm run dev-server
 
 Use this only for development or debugging when you want to run the server without launching Electron.
 
----
-
 ## Build And Distribution
-
-### Build Commands
 
 ```bash
 npm run build
@@ -86,13 +90,11 @@ npm run build:linux
 
 Generated installers and unpacked bundles are written to `dist/`.
 
-### Release Practice
+Release practice:
 
-- Commit source code, tests, icons, and build configuration to git
+- Commit source code, tests, icons, screenshots, and build configuration to git
 - Do not commit `dist/`, unpacked Electron bundles, or installer binaries
 - Publish generated `.exe`, `.dmg`, and Linux artifacts through GitHub Releases
-
----
 
 ## Usage
 
@@ -106,9 +108,10 @@ Each card supports:
 
 - front text
 - back text
-- optional image
+- optional image URL or uploaded image
 - optional auto-filled definitions
 - optional translations
+- optional German article auto-insert
 
 ### Studying
 
@@ -126,8 +129,6 @@ Study sessions track:
 - Per-deck export as JSON or CSV
 - Import existing backups into the desktop app
 
----
-
 ## Data Storage
 
 Karto stores user data locally in a SQLite database created in the Electron app data directory.
@@ -144,8 +145,6 @@ Desktop window preferences are stored separately in `desktop-preferences.json` i
 
 Legacy browser `localStorage` import support still exists only as a one-time migration path from older versions. SQLite is the active storage system for the desktop app.
 
----
-
 ## Project Structure
 
 ```text
@@ -161,6 +160,8 @@ Karto/
 ├── package.json
 ├── build/
 │   └── icon.png
+├── docs/
+│   └── screenshots/
 ├── js/
 │   ├── api.js
 │   ├── app-state.js
@@ -197,8 +198,6 @@ Karto/
     └── study-engine.test.js
 ```
 
----
-
 ## Test Commands
 
 ```bash
@@ -208,7 +207,7 @@ npm run verify:dist
 
 `npm test` covers the data model, SQLite repository, app state, startup verification helpers, keyboard shortcut logic, import/export, and server behavior.
 
----
+`npm run verify:dist` checks the packaged Windows archive after `npm run build:win`.
 
 ## License
 

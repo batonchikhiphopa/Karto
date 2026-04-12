@@ -25,4 +25,3 @@ Desktop.ini
 *.sqlite3
 
 electron-builder.env
-start.bat
