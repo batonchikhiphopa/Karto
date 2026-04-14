@@ -301,6 +301,17 @@ function extractGermanArticleFromDwds($) {
   return null;
 }
 
+function getGermanDefinitionLookupWord(word) {
+  const trimmedWord = String(word || "").trim();
+  const tokens = trimmedWord.split(/\s+/);
+
+  if (tokens.length > 1 && /^(der|die|das)$/i.test(tokens[0])) {
+    return tokens[tokens.length - 1];
+  }
+
+  return trimmedWord;
+}
+
 async function fetchDefinitionDe(fetchImpl, word) {
   const response = await fetchImpl(`https://www.dwds.de/wb/${encodeURIComponent(word)}`, {
     headers: { "User-Agent": USER_AGENT }
@@ -616,14 +627,15 @@ function createApp(options = {}) {
     }
 
     const trimmedWord = word.trim();
-    const cacheKey = `${dictLang}:${trimmedWord.toLowerCase()}`;
+    const lookupWord = dictLang === "de" ? getGermanDefinitionLookupWord(trimmedWord) : trimmedWord;
+    const cacheKey = `${dictLang}:${lookupWord.toLowerCase()}`;
     const cached = definitionCache.get(cacheKey);
     if (cached) {
       return res.status(cached.status).json(cached.payload);
     }
 
     try {
-      const result = await resolveDefinition(fetchImpl, trimmedWord, dictLang);
+      const result = await resolveDefinition(fetchImpl, lookupWord, dictLang);
 
       if (result.definition) {
         const payload = {

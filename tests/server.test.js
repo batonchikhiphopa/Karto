@@ -141,6 +141,31 @@ async function testGermanDictionaryRoute() {
   });
 }
 
+async function testGermanDictionaryRouteUsesLastTokenAfterArticle() {
+  await withServer({
+    fetchImpl: async (url) => {
+      if (String(url).includes("dwds.de")) {
+        assert.equal(new URL(String(url)).pathname, "/wb/Haus");
+
+        return new Response("<div class=\"dwdswb-definition\">Ein Gebäude zum Wohnen.</div>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" }
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    }
+  }, async (baseUrl) => {
+    const word = encodeURIComponent("das schöne Haus");
+    const response = await fetch(`${baseUrl}/api/define?word=${word}&dictLang=de&lang=de`);
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.definition, "Ein Gebäude zum Wohnen.");
+    assert.equal(payload.sourceLabel, "DWDS");
+  });
+}
+
 async function testRussianWiktionaryRoute() {
   await withServer({
     fetchImpl: async (url) => {
@@ -580,6 +605,7 @@ async function testPortFallbackWhenRequestedPortIsBusy() {
   await testOptionsPreflightForApiRoutes();
   await testDictionaryCaching();
   await testGermanDictionaryRoute();
+  await testGermanDictionaryRouteUsesLastTokenAfterArticle();
   await testRussianWiktionaryRoute();
   await testEnglishDefinitionFallsBackToWiktionary();
   await testGermanDefinitionFallsBackToWiktionary();
