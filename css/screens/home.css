@@ -1,0 +1,295 @@
+.deck-grid {
+  --deck-grid-gap: 24px;
+  --deck-tile-min-width: 270px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--deck-tile-min-width)), 1fr));
+  gap: var(--deck-grid-gap);
+  align-content: start;
+  justify-content: stretch;
+}
+
+.deck-grid[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.deck-grid[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.deck-grid[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.deck-tile,
+.create-tile {
+  width: 100%;
+  max-width: none;
+  height: 220px;
+  min-height: 220px;
+  justify-self: stretch;
+  transform: translate3d(0, 0, 0);
+  transform-origin: center center;
+  backface-visibility: hidden;
+  contain: layout style;
+  isolation: isolate;
+  will-change: transform;
+}
+
+.deck-tile {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
+}
+
+.deck-media-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.08), transparent 30%),
+    linear-gradient(160deg, color-mix(in srgb, var(--surface) 96%, transparent), color-mix(in srgb, var(--surface-3) 98%, transparent));
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+.deck-media-stage::before,
+.deck-media-stage::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.deck-media-stage::before {
+  inset: 0;
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.1), transparent 28%),
+    linear-gradient(180deg, rgba(7, 10, 15, 0.04), rgba(7, 10, 15, 0.2));
+  z-index: 1;
+}
+
+.deck-media-stage::after {
+  inset: 10px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  opacity: 0.16;
+  z-index: 1;
+}
+
+.deck-media-stage.is-empty {
+  background:
+    radial-gradient(circle at 16% 18%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 28%),
+    linear-gradient(155deg, color-mix(in srgb, var(--surface) 94%, transparent), color-mix(in srgb, var(--surface-3) 98%, transparent));
+}
+
+.deck-media-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0;
+  transform: translate3d(0, 4px, 0) scale(1.05);
+  backface-visibility: hidden;
+  will-change: opacity, transform;
+  transition: opacity 0.6s ease, transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.deck-media-image.is-active {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+.deck-tile-surface {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.deck-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.1) 30%,
+    rgba(0, 0, 0, 0.5) 70%,
+    rgba(4, 8, 14, 0.85) 100%
+  );
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  transition: opacity 0.3s ease;
+  z-index: 1;
+}
+
+.deck-tile-footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 3;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  will-change: transform;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.deck-tile-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deck-tile-count {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+
+.tile-action-bar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 4;
+  transform: translate3d(0, 8px, 0);
+  backface-visibility: hidden;
+  will-change: transform;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.tile-action-group {
+  display: flex;
+  gap: 8px;
+}
+
+.tile-action {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(15, 20, 28, 0.75);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: auto;
+  transform: translate3d(0, -8px, 0) scale(0.9);
+  backface-visibility: hidden;
+  will-change: opacity, transform;
+  transition:
+    opacity 0.2s ease,
+    transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    background 0.2s ease;
+}
+
+.deck-tile:hover,
+.deck-tile:focus-within {
+  transform: translate3d(0, -6px, 0) scale(1.01);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.2);
+}
+
+.deck-tile:hover .deck-media-image.is-active,
+.deck-tile:focus-within .deck-media-image.is-active {
+  transform: translate3d(0, 0, 0) scale(1.05);
+}
+
+.deck-tile:hover .deck-overlay,
+.deck-tile:focus-within .deck-overlay {
+  opacity: 0.95;
+}
+
+.deck-tile:hover .deck-tile-footer,
+.deck-tile:focus-within .deck-tile-footer {
+  transform: translate3d(0, -4px, 0);
+}
+
+.deck-tile:hover .tile-action-bar,
+.deck-tile:focus-within .tile-action-bar {
+  transform: translate3d(0, 0, 0);
+}
+
+.deck-tile:hover .tile-action,
+.deck-tile:focus-within .tile-action {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+.tile-action:hover,
+.tile-action:focus-visible {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translate3d(0, 0, 0) scale(1.1);
+}
+
+.tile-action:active {
+  transform: translate3d(0, 0, 0) scale(0.95);
+}
+
+.create-tile {
+  display: grid;
+  place-items: center;
+  border-radius: 24px;
+  border: 2px dashed color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.3s ease,
+    border-color 0.3s ease,
+    background 0.3s ease;
+}
+
+.create-tile:hover,
+.create-tile:focus-visible {
+  transform: translate3d(0, -6px, 0);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-bg) 20%, var(--surface));
+  box-shadow: var(--shadow);
+}
+
+.create-tile-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.create-plus {
+  font-size: 3.5rem;
+  line-height: 1;
+  color: var(--accent);
+  transition: transform 0.3s ease;
+}
+
+.create-tile:hover .create-plus {
+  transform: scale(1.1);
+}
+
+.create-text {
+  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}

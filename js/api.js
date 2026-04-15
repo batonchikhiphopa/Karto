@@ -8,11 +8,6 @@
   const Karto = root.Karto || (root.Karto = {});
   Object.assign(Karto, api);
 })(typeof window !== "undefined" ? window : globalThis, function(root) {
-  const LOCAL_API_BASES = [
-    "http://127.0.0.1:3000/api",
-    "http://localhost:3000/api"
-  ];
-
   function normalizeApiBase(value) {
     return String(value || "").replace(/\/+$/, "");
   }
@@ -34,12 +29,6 @@
     });
   }
 
-  function isLocalApiOrigin(location) {
-    const hostname = String(location?.hostname || "").toLowerCase();
-    const port = String(location?.port || "");
-    return port === "3000" && (hostname === "127.0.0.1" || hostname === "localhost");
-  }
-
   function resolveApiBases(basePath, location, customApiBases) {
     if (Array.isArray(customApiBases) && customApiBases.length > 0) {
       return dedupe(customApiBases);
@@ -50,12 +39,7 @@
       return [normalizeApiBase(resolvedBasePath)];
     }
 
-    const sameOriginBase = normalizeApiBase(new URL(resolvedBasePath, location.origin).toString());
-    if (isLocalApiOrigin(location)) {
-      return [sameOriginBase];
-    }
-
-    return dedupe([sameOriginBase, ...LOCAL_API_BASES]);
+    return [normalizeApiBase(new URL(resolvedBasePath, location.origin).toString())];
   }
 
   function createApiClient(options = {}) {

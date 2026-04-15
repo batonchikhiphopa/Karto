@@ -350,7 +350,9 @@
       });
     }
 
-    function moveCards(cardIds, targetDeckId) {
+    async function moveCards(cardIds, targetDeckId) {
+      await ctx.store.ensureDeckHydrated?.(ctx.state.editingDeckId, { includeMedia: true });
+      await ctx.store.ensureDeckHydrated?.(targetDeckId, { includeMedia: true });
       const deck = getDeck();
       const targetDeck = ctx.getDeckById(targetDeckId);
       if (!deck || !targetDeck) {
@@ -386,8 +388,8 @@
       };
     }
 
-    function moveCardsFromRow(cardId) {
-      const result = moveCards(getActionCardIds(cardId), ctx.state.pendingMoveDeckId);
+    async function moveCardsFromRow(cardId) {
+      const result = await moveCards(getActionCardIds(cardId), ctx.state.pendingMoveDeckId);
       closeInlineMoveMenu();
       render();
 
@@ -489,7 +491,8 @@
       });
     }
 
-    function open(deckId) {
+    async function open(deckId) {
+      await ctx.store.ensureDeckHydrated?.(deckId);
       const deck = ctx.getDeckById(deckId);
       if (!deck) return;
 
@@ -527,9 +530,12 @@
       render();
     }
 
-    function copyFromOtherDeck(cardId) {
+    async function copyFromOtherDeck(cardId) {
+      const sourceDeckId = document.getElementById("sourceOtherDeckSelect").value;
+      await ctx.store.ensureDeckHydrated?.(ctx.state.addOtherTargetDeckId, { includeMedia: true });
+      await ctx.store.ensureDeckHydrated?.(sourceDeckId, { includeMedia: true });
       const targetDeck = ctx.getDeckById(ctx.state.addOtherTargetDeckId);
-      const sourceDeck = ctx.getDeckById(document.getElementById("sourceOtherDeckSelect").value);
+      const sourceDeck = ctx.getDeckById(sourceDeckId);
       const card = sourceDeck?.cards.find((item) => item.id === cardId);
 
       if (!targetDeck || !card) return;
@@ -569,12 +575,13 @@
       ctx.router.goTo("addFromOtherScreen", "libraryScreen");
     }
 
-    function renderSourceCardList() {
+    async function renderSourceCardList() {
       const select = document.getElementById("sourceOtherDeckSelect");
-      const sourceDeck = ctx.getDeckById(select.value);
       const sourceList = document.getElementById("sourceCardList");
 
       clearElement(sourceList);
+      await ctx.store.ensureDeckHydrated?.(select.value);
+      const sourceDeck = ctx.getDeckById(select.value);
 
       if (!sourceDeck || sourceDeck.cards.length === 0) {
         sourceList.appendChild(ctx.createEmptyMessage(t("addFromOther.empty")));
@@ -636,7 +643,7 @@
       }
 
       if (button.dataset.action === "confirm-move-card") {
-        moveCardsFromRow(cardId);
+        void moveCardsFromRow(cardId);
       }
 
       if (button.dataset.action === "cancel-move-card") {
@@ -675,7 +682,7 @@
     document.getElementById("sourceCardList").addEventListener("click", (event) => {
       const button = event.target.closest("[data-action='copy-card']");
       if (!button) return;
-      copyFromOtherDeck(button.dataset.cardId);
+      void copyFromOtherDeck(button.dataset.cardId);
     });
     document.getElementById("closeAddOtherBtn").addEventListener("click", () => {
       render();

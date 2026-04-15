@@ -5,11 +5,10 @@ const SHELL_MARKERS = Object.freeze({
   main: "#appMain"
 });
 
-const STARTUP_VERIFY_TIMEOUT_MS = 3000;
+const STARTUP_VERIFY_TIMEOUT_MS = 10000;
 const MIN_NORMALIZED_BODY_LENGTH = 24;
 const MAX_LOG_PREVIEW_LENGTH = 120;
 const RAW_BOOTSTRAP_SIGNATURES = Object.freeze([
-  "document.documentElement.dataset.theme = localStorage.getItem(\"karto.theme\") || \"system\"",
   "Karto (function() {"
 ]);
 

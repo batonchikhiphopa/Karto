@@ -11,17 +11,33 @@ const {
   createId,
   normalizeStoredDecks
 } = require("./data-model");
+const {
+  shuffleCards
+} = require("./study-engine");
+const {
+  deriveStudyImageUrl,
+  deriveTileImageUrl,
+  getResizedDimensions,
+  isDataImageUrl,
+  normalizeImageSource,
+  STUDY_DATA_IMAGE_MAX_SIDE,
+  STUDY_IMAGE_QUALITY,
+  TILE_THUMB_MAX_SIDE,
+  TILE_THUMB_QUALITY
+} = require("./image-utils");
 
 const DEFAULT_THEME_PREFERENCE = "system";
 const DEFAULT_HOME_GRID_COLUMNS = "auto";
 const DEFAULT_LANGUAGE = "en";
 const MAX_STUDY_SESSIONS_PER_DECK = 5;
+const APP_SHELL_LAST_DECK_CARD_LIMIT = 5;
+const APP_SHELL_OTHER_DECK_CARD_LIMIT = 1;
 
 const SETTINGS_KEYS = Object.freeze({
   language: "language",
   theme: "theme",
   homeGridColumns: "homeGridColumns",
-  legacyMigrationCompleted: "legacyMigrationCompleted"
+  homeMediaCache: "homeMediaCache"
 });
 
 function normalizeThemePreference(value) {
@@ -133,15 +149,273 @@ function normalizeStudySessions(value) {
     });
 }
 
-function hasAnyLegacyData(payload) {
-  return (
-    (Array.isArray(payload.decks) && payload.decks.length > 0) ||
-    !!payload.languagePreference ||
-    payload.themePreference !== DEFAULT_THEME_PREFERENCE ||
-    payload.homeGridColumns !== DEFAULT_HOME_GRID_COLUMNS ||
-    Object.keys(payload.studyProgress).length > 0 ||
-    payload.studySessions.length > 0
-  );
+function safeParseJson(value, fallback) {
+  if (!value) {
+    return fallback;
+  }
+
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeHomeMediaCacheEntry(entry) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    return null;
+  }
+
+  const signature = typeof entry.signature === "string" ? entry.signature.trim() : "";
+  if (!signature) {
+    return null;
+  }
+
+  const seenImages = new Set();
+  const images = (Array.isArray(entry.images) ? entry.images : [])
+    .map((image) => (typeof image === "string" ? image.trim() : ""))
+    .filter((image) => {
+      if (!image || seenImages.has(image)) {
+        return false;
+      }
+
+      seenImages.add(image);
+      return true;
+    });
+
+  return {
+    signature,
+    images,
+    updatedAt: typeof entry.updatedAt === "string" && entry.updatedAt
+      ? entry.updatedAt
+      : new Date().toISOString()
+  };
+}
+
+function normalizeHomeMediaCache(value) {
+  const parsedValue = safeParseJson(value, {});
+  if (!parsedValue || typeof parsedValue !== "object" || Array.isArray(parsedValue)) {
+    return {};
+  }
+
+  return Object.entries(parsedValue).reduce((result, [deckId, entry]) => {
+    if (typeof deckId !== "string" || !deckId.trim()) {
+      return result;
+    }
+
+    const normalizedEntry = normalizeHomeMediaCacheEntry(entry);
+    if (!normalizedEntry) {
+      return result;
+    }
+
+    result[deckId] = normalizedEntry;
+    return result;
+  }, {});
+}
+
+function deriveLightStudyImageUrl(image, imageStudy) {
+  const explicitStudyImage = normalizeImageSource(imageStudy);
+  if (explicitStudyImage && !isDataImageUrl(explicitStudyImage)) {
+    return explicitStudyImage;
+  }
+
+  const source = normalizeImageSource(image);
+  if (!source || isDataImageUrl(source)) {
+    return "";
+  }
+
+  return deriveStudyImageUrl(source);
+}
+
+function deriveLightThumbImageUrl(image, imageThumb) {
+  const explicitThumb = normalizeImageSource(imageThumb);
+  if (explicitThumb) {
+    return explicitThumb;
+  }
+
+  const source = normalizeImageSource(image);
+  if (!source || isDataImageUrl(source)) {
+    return "";
+  }
+
+  return deriveTileImageUrl(source);
+}
+
+function isJpegDataImageUrl(value) {
+  return /^data:image\/jpe?g[;,]/i.test(normalizeImageSource(value));
+}
+
+function resolveStoredDerivedStudyUrl(image) {
+  const derived = deriveStudyImageUrl(image);
+  return derived && derived !== image ? derived : "";
+}
+
+function resolveNativeImage(options) {
+  return options?.nativeImage && typeof options.nativeImage.createFromDataURL === "function"
+    ? options.nativeImage
+    : null;
+}
+
+function resizeDataImageWithNativeImage(source, options = {}) {
+  const normalizedSource = normalizeImageSource(source);
+  const nativeImage = resolveNativeImage(options);
+  if (!isDataImageUrl(normalizedSource) || !nativeImage) {
+    return "";
+  }
+
+  try {
+    const image = nativeImage.createFromDataURL(normalizedSource);
+    if (!image || image.isEmpty?.()) {
+      return "";
+    }
+
+    const size = typeof image.getSize === "function" ? image.getSize() : {};
+    const dimensions = getResizedDimensions(size.width, size.height, options.maxSide);
+    const sourceWidth = Math.max(1, Math.round(Number(size.width) || dimensions.width));
+    const sourceHeight = Math.max(1, Math.round(Number(size.height) || dimensions.height));
+    const shouldResize = dimensions.width !== sourceWidth || dimensions.height !== sourceHeight;
+
+    if (!options.force && !shouldResize && isJpegDataImageUrl(normalizedSource)) {
+      return normalizedSource;
+    }
+
+    const outputImage = shouldResize && typeof image.resize === "function"
+      ? image.resize({
+        width: dimensions.width,
+        height: dimensions.height,
+        quality: "good"
+      })
+      : image;
+    const quality = Math.round(Math.max(0, Math.min(1, Number(options.quality) || 0.72)) * 100);
+    const buffer = typeof outputImage.toJPEG === "function" ? outputImage.toJPEG(quality) : null;
+
+    return buffer?.length
+      ? `data:image/jpeg;base64,${Buffer.from(buffer).toString("base64")}`
+      : "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeLocalDataImageForStudy(source, nativeImage) {
+  return resizeDataImageWithNativeImage(source, {
+    maxSide: STUDY_DATA_IMAGE_MAX_SIDE,
+    quality: STUDY_IMAGE_QUALITY,
+    nativeImage
+  }) || normalizeImageSource(source);
+}
+
+function createLocalDataImageThumb(source, nativeImage) {
+  return resizeDataImageWithNativeImage(source, {
+    force: true,
+    maxSide: TILE_THUMB_MAX_SIDE,
+    quality: TILE_THUMB_QUALITY,
+    nativeImage
+  });
+}
+
+function normalizePersistedCardMedia(card, options = {}) {
+  if (!card) {
+    return card;
+  }
+
+  const nativeImage = resolveNativeImage(options);
+  let image = normalizeImageSource(card.image);
+  let imageThumb = normalizeImageSource(card.imageThumb);
+  let imageStudy = normalizeImageSource(card.imageStudy);
+  const imageIsData = isDataImageUrl(image);
+  const studyIsData = isDataImageUrl(imageStudy);
+
+  if (imageIsData || (!image && studyIsData)) {
+    image = studyIsData ? imageStudy : normalizeLocalDataImageForStudy(image, nativeImage);
+    imageThumb = imageThumb || createLocalDataImageThumb(image, nativeImage);
+    imageStudy = "";
+  } else if (image) {
+    imageThumb = imageThumb || deriveTileImageUrl(image);
+    imageStudy = imageStudy && !studyIsData
+      ? imageStudy
+      : resolveStoredDerivedStudyUrl(image);
+  } else if (studyIsData) {
+    image = imageStudy;
+    imageThumb = imageThumb || createLocalDataImageThumb(image, nativeImage);
+    imageStudy = "";
+  } else {
+    imageStudy = imageStudy && !studyIsData ? imageStudy : "";
+  }
+
+  return {
+    ...card,
+    image,
+    imageThumb,
+    imageStudy,
+    hasImage: card.hasImage || !!image || !!imageThumb || !!imageStudy,
+    mediaLoaded: card.mediaLoaded
+  };
+}
+
+function mapCardRow(row, options = {}) {
+  const fullImage = normalizeImageSource(row?.image);
+  const imageThumb = options.includeFullImage
+    ? normalizeImageSource(row.imageThumb)
+    : deriveLightThumbImageUrl(fullImage, row.imageThumb);
+  const imageStudy = options.includeFullImage
+    ? normalizeImageSource(row?.imageStudy) || (isDataImageUrl(fullImage) ? "" : deriveStudyImageUrl(fullImage))
+    : "";
+  const hasImage = !!fullImage || !!imageThumb || !!deriveLightStudyImageUrl(fullImage, row?.imageStudy);
+
+  return {
+    id: row.id,
+    frontText: row.frontText,
+    backText: row.backText,
+    image: options.includeFullImage ? fullImage : "",
+    imageThumb,
+    imageStudy,
+    imageSide: row.imageSide === "front" ? "front" : "back",
+    hasImage,
+    mediaLoaded: options.includeFullImage || !fullImage
+  };
+}
+
+function mergeCardWithExistingMedia(card, existingCard) {
+  if (!existingCard || card.mediaLoaded !== false) {
+    return card;
+  }
+
+  return {
+    ...card,
+    image: existingCard.image || card.image || "",
+    imageThumb: card.imageThumb || existingCard.imageThumb || "",
+    imageStudy: card.imageStudy || existingCard.imageStudy || "",
+    hasImage: card.hasImage || existingCard.hasImage,
+    mediaLoaded: true
+  };
+}
+
+function mergePartialDeckCards(deck, existingCards) {
+  if (deck.cardsHydrated === true || !Array.isArray(existingCards) || existingCards.length === 0) {
+    return deck.cards;
+  }
+
+  const partialCardsById = new Map(deck.cards.map((card) => [card.id, card]));
+  const mergedCards = existingCards.map((existingCard) => {
+    const partialCard = partialCardsById.get(existingCard.id);
+    if (!partialCard) {
+      return existingCard;
+    }
+
+    partialCardsById.delete(existingCard.id);
+    return mergeCardWithExistingMedia(partialCard, existingCard);
+  });
+
+  partialCardsById.forEach((card) => {
+    mergedCards.push(card);
+  });
+
+  return mergedCards;
 }
 
 function createRepositoryError(message) {
@@ -151,6 +425,7 @@ function createRepositoryError(message) {
 function createSqliteRepository(options = {}) {
   const dbPath = options.dbPath;
   const DatabaseCtor = options.DatabaseCtor || Database;
+  const randomFn = typeof options.randomFn === "function" ? options.randomFn : Math.random;
 
   if (typeof dbPath !== "string" || !dbPath.trim()) {
     throw createRepositoryError("Database path is required.");
@@ -178,6 +453,8 @@ function createSqliteRepository(options = {}) {
       front_text TEXT NOT NULL,
       back_text TEXT NOT NULL,
       image TEXT NOT NULL DEFAULT '',
+      image_thumb TEXT NOT NULL DEFAULT '',
+      image_study TEXT NOT NULL DEFAULT '',
       image_side TEXT NOT NULL DEFAULT 'back',
       created_at TEXT NOT NULL,
       sort_index INTEGER NOT NULL DEFAULT 0,
@@ -226,6 +503,14 @@ function createSqliteRepository(options = {}) {
     `);
   }
 
+  const cardColumns = db.prepare("PRAGMA table_info(cards)").all();
+  if (!cardColumns.some((column) => column.name === "image_thumb")) {
+    db.exec("ALTER TABLE cards ADD COLUMN image_thumb TEXT NOT NULL DEFAULT ''");
+  }
+  if (!cardColumns.some((column) => column.name === "image_study")) {
+    db.exec("ALTER TABLE cards ADD COLUMN image_study TEXT NOT NULL DEFAULT ''");
+  }
+
   const statements = {
     deleteAllDecks: db.prepare("DELETE FROM decks"),
     deleteCardsByDeck: db.prepare("DELETE FROM cards WHERE deck_id = ?"),
@@ -243,6 +528,8 @@ function createSqliteRepository(options = {}) {
         front_text AS frontText,
         back_text AS backText,
         image,
+        image_thumb AS imageThumb,
+        image_study AS imageStudy,
         image_side AS imageSide,
         created_at AS createdAt,
         sort_index AS sortIndex
@@ -256,15 +543,34 @@ function createSqliteRepository(options = {}) {
         id,
         name,
         created_at AS createdAt,
-        sort_index AS sortIndex
+        sort_index AS sortIndex,
+        (
+          SELECT COUNT(*)
+          FROM cards
+          WHERE cards.deck_id = decks.id
+        ) AS cardCount
       FROM decks
       ORDER BY sort_index ASC, created_at ASC, id ASC
     `),
-    getDeckCount: db.prepare("SELECT COUNT(*) AS count FROM decks"),
+    getLastStudiedDeck: db.prepare(`
+      SELECT deck_id AS deckId
+      FROM study_sessions
+      WHERE deck_id IS NOT NULL AND deck_id <> ''
+      ORDER BY finished_at DESC, created_at DESC, id DESC
+      LIMIT 1
+    `),
+    getFirstNonEmptyDeck: db.prepare(`
+      SELECT decks.id AS deckId
+      FROM decks
+      WHERE EXISTS (
+        SELECT 1
+        FROM cards
+        WHERE cards.deck_id = decks.id
+      )
+      ORDER BY decks.sort_index ASC, decks.created_at ASC, decks.id ASC
+      LIMIT 1
+    `),
     getSetting: db.prepare("SELECT value FROM settings WHERE key = ?"),
-    getSettingsCount: db.prepare("SELECT COUNT(*) AS count FROM settings WHERE key IN (?, ?, ?)"),
-    getStudyProgressCount: db.prepare("SELECT COUNT(*) AS count FROM study_progress"),
-    getStudySessionCount: db.prepare("SELECT COUNT(*) AS count FROM study_sessions"),
     getStudyProgressEntry: db.prepare(`
       SELECT
         seen_count AS seenCount,
@@ -307,18 +613,35 @@ function createSqliteRepository(options = {}) {
         front_text,
         back_text,
         image,
+        image_thumb,
+        image_study,
         image_side,
         created_at,
         sort_index
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         deck_id = excluded.deck_id,
         front_text = excluded.front_text,
         back_text = excluded.back_text,
         image = excluded.image,
+        image_thumb = excluded.image_thumb,
+        image_study = excluded.image_study,
         image_side = excluded.image_side,
         created_at = excluded.created_at,
         sort_index = excluded.sort_index
+    `),
+    getCardMediaByIds: db.prepare(`
+      SELECT
+        id,
+        front_text AS frontText,
+        back_text AS backText,
+        image,
+        image_thumb AS imageThumb,
+        image_study AS imageStudy,
+        image_side AS imageSide
+      FROM cards
+      WHERE id IN (SELECT value FROM json_each(?))
+      ORDER BY deck_id ASC, sort_index ASC, created_at ASC, id ASC
     `),
     insertDeck: db.prepare(`
       INSERT INTO decks (
@@ -415,21 +738,96 @@ function createSqliteRepository(options = {}) {
   }
 
   function getCardsByDeck(deckId) {
-    return statements.getCardsByDeck.all(deckId).map((row) => ({
-      id: row.id,
-      frontText: row.frontText,
-      backText: row.backText,
-      image: row.image || "",
-      imageSide: row.imageSide === "front" ? "front" : "back"
-    }));
+    return statements.getCardsByDeck.all(deckId).map((row) => mapCardRow(row, { includeFullImage: true }));
   }
 
   function getDecks() {
     return statements.getDeckRows.all().map((row) => ({
       id: row.id,
       name: row.name,
+      cardCount: row.cardCount,
+      cardsHydrated: true,
       cards: getCardsByDeck(row.id)
     }));
+  }
+
+  function getShellFocusDeckId(deckRows) {
+    const deckIds = new Set(deckRows.map((deck) => deck.id));
+    const lastStudiedDeckId = statements.getLastStudiedDeck.get()?.deckId || "";
+    if (deckIds.has(lastStudiedDeckId)) {
+      return lastStudiedDeckId;
+    }
+
+    return statements.getFirstNonEmptyDeck.get()?.deckId || "";
+  }
+
+  function loadDeckCards(deckId, options = {}) {
+    const deck = statements.getDeckById.get(deckId);
+    if (!deck) {
+      return null;
+    }
+
+    const cardRows = statements.getCardsByDeck.all(deckId);
+    const limit = Number.isFinite(Number(options.limit))
+      ? Math.max(0, Math.round(Number(options.limit)))
+      : null;
+    const limitedRows = limit === null ? cardRows : cardRows.slice(0, limit);
+
+    return {
+      id: deck.id,
+      name: deck.name,
+      cardCount: cardRows.length,
+      cardsHydrated: limit === null || limit >= cardRows.length,
+      cards: limitedRows.map((row) => mapCardRow(row, { includeFullImage: options.includeMedia === true }))
+    };
+  }
+
+  function loadShellPreviewDeck(row, focusDeckId) {
+    const cardRows = statements.getCardsByDeck.all(row.id);
+    const previewLimit = row.id === focusDeckId
+      ? APP_SHELL_LAST_DECK_CARD_LIMIT
+      : APP_SHELL_OTHER_DECK_CARD_LIMIT;
+    const previewRows = shuffleCards(cardRows, randomFn).slice(0, previewLimit);
+
+    return {
+      id: row.id,
+      name: row.name,
+      cardCount: row.cardCount,
+      cardsHydrated: previewRows.length >= cardRows.length,
+      cards: previewRows.map((cardRow) => mapCardRow(cardRow, { includeFullImage: false }))
+    };
+  }
+
+  function loadCardMedia(cardIds) {
+    const normalizedIds = Array.isArray(cardIds)
+      ? cardIds
+        .map((cardId) => (typeof cardId === "string" ? cardId.trim() : ""))
+        .filter(Boolean)
+      : [];
+
+    if (normalizedIds.length === 0) {
+      return [];
+    }
+
+    const uniqueIds = Array.from(new Set(normalizedIds));
+    return statements.getCardMediaByIds
+      .all(JSON.stringify(uniqueIds))
+      .map((row) => mapCardRow(row, { includeFullImage: true }));
+  }
+
+  function loadAppShellData() {
+    const deckRows = statements.getDeckRows.all();
+    const focusDeckId = getShellFocusDeckId(deckRows);
+
+    return {
+      decks: deckRows.map((row) => loadShellPreviewDeck(row, focusDeckId)),
+      languagePreference: normalizeLanguage(getSetting(SETTINGS_KEYS.language)),
+      themePreference: normalizeThemePreference(getSetting(SETTINGS_KEYS.theme)),
+      homeGridColumns: normalizeHomeGridColumns(getSetting(SETTINGS_KEYS.homeGridColumns)),
+      homeMediaCache: normalizeHomeMediaCache(getSetting(SETTINGS_KEYS.homeMediaCache)),
+      studyProgress: loadStudyProgress(),
+      studySessions: loadStudySessions()
+    };
   }
 
   function loadStudyProgress() {
@@ -449,9 +847,9 @@ function createSqliteRepository(options = {}) {
       languagePreference: normalizeLanguage(getSetting(SETTINGS_KEYS.language)),
       themePreference: normalizeThemePreference(getSetting(SETTINGS_KEYS.theme)),
       homeGridColumns: normalizeHomeGridColumns(getSetting(SETTINGS_KEYS.homeGridColumns)),
+      homeMediaCache: normalizeHomeMediaCache(getSetting(SETTINGS_KEYS.homeMediaCache)),
       studyProgress: loadStudyProgress(),
-      studySessions: loadStudySessions(),
-      legacyMigrationCompleted: getSetting(SETTINGS_KEYS.legacyMigrationCompleted) === "1"
+      studySessions: loadStudySessions()
     };
   }
 
@@ -463,10 +861,15 @@ function createSqliteRepository(options = {}) {
     const existingCardCreatedAt = new Map(
       statements.getAllCardsCreatedAt.all().map((row) => [row.id, row.created_at])
     );
+    const existingCardsByDeck = new Map(
+      getDecks().map((deck) => [deck.id, deck.cards])
+    );
 
     statements.deleteAllDecks.run();
 
     normalizedDecks.forEach((deck, deckIndex) => {
+      const mergedCards = mergePartialDeckCards(deck, existingCardsByDeck.get(deck.id));
+
       statements.insertDeck.run(
         deck.id,
         deck.name,
@@ -474,15 +877,23 @@ function createSqliteRepository(options = {}) {
         deckIndex
       );
 
-      deck.cards.forEach((card, cardIndex) => {
+      mergedCards.forEach((card, cardIndex) => {
+        const existingCard = (existingCardsByDeck.get(deck.id) || []).find((item) => item.id === card.id);
+        const persistedCard = normalizePersistedCardMedia(
+          mergeCardWithExistingMedia(card, existingCard),
+          options
+        );
+
         statements.insertCard.run(
-          card.id,
+          persistedCard.id,
           deck.id,
-          card.frontText,
-          card.backText,
-          card.image || "",
-          card.imageSide === "front" ? "front" : "back",
-          existingCardCreatedAt.get(card.id) || now,
+          persistedCard.frontText,
+          persistedCard.backText,
+          persistedCard.image || "",
+          persistedCard.imageThumb || "",
+          persistedCard.imageStudy || "",
+          persistedCard.imageSide === "front" ? "front" : "back",
+          existingCardCreatedAt.get(persistedCard.id) || now,
           cardIndex
         );
       });
@@ -549,12 +960,14 @@ function createSqliteRepository(options = {}) {
     return {
       id: deck.id,
       name: deck.name,
+      cardCount: 0,
+      cardsHydrated: true,
       cards: []
     };
   }
 
   function createCard(fields) {
-    const normalizedCard = createCardModel(fields);
+    const normalizedCard = normalizePersistedCardMedia(createCardModel(fields), options);
     if (!normalizedCard) {
       throw createRepositoryError("Card fields are invalid.");
     }
@@ -577,6 +990,8 @@ function createSqliteRepository(options = {}) {
       normalizedCard.frontText,
       normalizedCard.backText,
       normalizedCard.image || "",
+      normalizedCard.imageThumb || "",
+      normalizedCard.imageStudy || "",
       normalizedCard.imageSide,
       now,
       sortIndex
@@ -593,6 +1008,8 @@ function createSqliteRepository(options = {}) {
         return setSetting(key, normalizeThemePreference(value));
       case SETTINGS_KEYS.homeGridColumns:
         return setSetting(key, normalizeHomeGridColumns(value));
+      case SETTINGS_KEYS.homeMediaCache:
+        return setSetting(key, JSON.stringify(normalizeHomeMediaCache(value)));
       default:
         return setSetting(key, value);
     }
@@ -655,16 +1072,11 @@ function createSqliteRepository(options = {}) {
   const clearAllDataTx = db.transaction((options = {}) => {
     const includeLanguage = options.includeLanguage !== false;
     const preservedLanguage = includeLanguage ? null : normalizeLanguage(getSetting(SETTINGS_KEYS.language));
-    const migrationCompleted = getSetting(SETTINGS_KEYS.legacyMigrationCompleted) === "1";
 
     statements.deleteAllDecks.run();
     statements.deleteAllStudyProgress.run();
     statements.deleteAllStudySessions.run();
     statements.deleteAllSettings.run();
-
-    if (migrationCompleted) {
-      setSetting(SETTINGS_KEYS.legacyMigrationCompleted, "1");
-    }
 
     if (preservedLanguage) {
       setSetting(SETTINGS_KEYS.language, preservedLanguage);
@@ -682,6 +1094,7 @@ function createSqliteRepository(options = {}) {
       languagePreference: normalizeLanguage(snapshot.languagePreference || snapshot.language),
       themePreference: normalizeThemePreference(snapshot.themePreference),
       homeGridColumns: normalizeHomeGridColumns(snapshot.homeGridColumns),
+      homeMediaCache: normalizeHomeMediaCache(snapshot.homeMediaCache),
       studyProgress: normalizeStudyProgress(snapshot.studyProgress),
       studySessions: normalizeStudySessions(snapshot.studySessions)
     };
@@ -691,74 +1104,17 @@ function createSqliteRepository(options = {}) {
     replaceStudySessionsTx(normalizedSnapshot.studySessions);
     saveSettingValue(SETTINGS_KEYS.theme, normalizedSnapshot.themePreference);
     saveSettingValue(SETTINGS_KEYS.homeGridColumns, normalizedSnapshot.homeGridColumns);
+    saveSettingValue(SETTINGS_KEYS.homeMediaCache, normalizedSnapshot.homeMediaCache);
 
     if (normalizedSnapshot.languagePreference) {
       saveSettingValue(SETTINGS_KEYS.language, normalizedSnapshot.languagePreference);
     }
 
-    setSetting(SETTINGS_KEYS.legacyMigrationCompleted, "1");
     return loadAppData();
   });
 
   function restoreAppStateSnapshot(snapshot = {}) {
     return restoreAppStateSnapshotTx(snapshot);
-  }
-
-  const importLegacyLocalStorageTx = db.transaction((payload = {}) => {
-    const migrationCompleted = getSetting(SETTINGS_KEYS.legacyMigrationCompleted) === "1";
-    if (migrationCompleted) {
-      return {
-        imported: false,
-        clearLegacyStorage: true,
-        appData: loadAppData()
-      };
-    }
-
-    const normalizedPayload = {
-      decks: normalizeStoredDecks(payload.decks),
-      languagePreference: normalizeLanguage(payload.languagePreference || payload.language),
-      themePreference: normalizeThemePreference(payload.themePreference),
-      homeGridColumns: normalizeHomeGridColumns(payload.homeGridColumns),
-      studyProgress: normalizeStudyProgress(payload.studyProgress),
-      studySessions: normalizeStudySessions(payload.studySessions)
-    };
-
-    const hasExistingUserData =
-      statements.getDeckCount.get().count > 0 ||
-      statements.getStudyProgressCount.get().count > 0 ||
-      statements.getStudySessionCount.get().count > 0 ||
-      statements.getSettingsCount.get(
-        SETTINGS_KEYS.language,
-        SETTINGS_KEYS.theme,
-        SETTINGS_KEYS.homeGridColumns
-      ).count > 0;
-
-    const shouldImport = !hasExistingUserData && hasAnyLegacyData(normalizedPayload);
-
-    if (shouldImport) {
-      replaceDecksSnapshotTx(normalizedPayload.decks);
-      replaceStudyProgressTx(normalizedPayload.studyProgress);
-      replaceStudySessionsTx(normalizedPayload.studySessions);
-
-      if (normalizedPayload.languagePreference) {
-        saveSettingValue(SETTINGS_KEYS.language, normalizedPayload.languagePreference);
-      }
-
-      saveSettingValue(SETTINGS_KEYS.theme, normalizedPayload.themePreference);
-      saveSettingValue(SETTINGS_KEYS.homeGridColumns, normalizedPayload.homeGridColumns);
-    }
-
-    setSetting(SETTINGS_KEYS.legacyMigrationCompleted, "1");
-
-    return {
-      imported: shouldImport,
-      clearLegacyStorage: true,
-      appData: loadAppData()
-    };
-  });
-
-  function importLegacyLocalStorage(payload = {}) {
-    return importLegacyLocalStorageTx(payload);
   }
 
   function close() {
@@ -774,8 +1130,10 @@ function createSqliteRepository(options = {}) {
     getBootstrapSettings,
     getCardsByDeck,
     getDecks,
-    importLegacyLocalStorage,
     loadAppData,
+    loadAppShellData,
+    loadCardMedia,
+    loadDeckCards,
     recordStudyAnswer,
     recordStudySession,
     restoreAppStateSnapshot,
@@ -791,6 +1149,7 @@ module.exports = {
   SETTINGS_KEYS,
   createSqliteRepository,
   normalizeHomeGridColumns,
+  normalizeHomeMediaCache,
   normalizeLanguage,
   normalizeStudyProgress,
   normalizeStudySessions,

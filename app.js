@@ -1,8 +1,70 @@
-(function(root) {
+(async function(root) {
+  const STARTUP_MEDIA_PREWARM_TIMEOUT_MS = 1200;
   const store = root.Karto.createAppState();
   const { state } = store;
+  const bootScreen = document.getElementById("bootScreen");
 
-  store.load();
+  function wait(ms) {
+    return new Promise((resolve) => {
+      root.setTimeout(resolve, ms);
+    });
+  }
+
+  function normalizeImageSource(value) {
+    return root.Karto.normalizeImageSource?.(value) || (typeof value === "string" ? value.trim() : "");
+  }
+
+  function getStartupMediaUrl(card) {
+    return [
+      normalizeImageSource(card?.imageThumb),
+      normalizeImageSource(card?.imageStudy),
+      normalizeImageSource(root.Karto.deriveTileImageUrl?.(card?.image)),
+      normalizeImageSource(card?.image)
+    ].find(Boolean) || "";
+  }
+
+  function getStartupMediaUrls(decks) {
+    const seen = new Set();
+    return (Array.isArray(decks) ? decks : [])
+      .flatMap((deck) => (Array.isArray(deck?.cards) ? deck.cards : []))
+      .map(getStartupMediaUrl)
+      .filter((imageUrl) => {
+        if (!imageUrl || seen.has(imageUrl)) {
+          return false;
+        }
+
+        seen.add(imageUrl);
+        return true;
+      });
+  }
+
+  async function prewarmStartupMedia(decks) {
+    const loadImage = root.Karto.loadImage;
+    const delayMs = Number(root.kartoDesktop?.startupPrewarmDelayMs) || 0;
+    const imageUrls = getStartupMediaUrls(decks);
+    const tasks = [];
+
+    if (typeof loadImage === "function") {
+      imageUrls.forEach((imageUrl) => {
+        tasks.push(loadImage(imageUrl));
+      });
+    }
+
+    if (delayMs > 0) {
+      tasks.push(wait(delayMs));
+    }
+
+    if (!tasks.length) {
+      return;
+    }
+
+    await Promise.race([
+      Promise.allSettled(tasks),
+      wait(STARTUP_MEDIA_PREWARM_TIMEOUT_MS)
+    ]);
+  }
+
+  await store.loadShell();
   setLanguage(state.languagePreference, {
     persist: false,
     refresh: false,
@@ -98,7 +160,10 @@
   async function shareDeck(deck) {
     if (!deck) return false;
 
-    const payload = createExportPayload([deck]);
+    await store.ensureDeckHydrated?.(deck.id, { includeMedia: true });
+    store.saveDecksNow?.();
+    const exportDeck = state.decks.find((item) => item.id === deck.id) || deck;
+    const payload = createExportPayload([exportDeck]);
     const json = JSON.stringify(payload, null, 2);
     const filename = buildDeckExportFilename(deck.name);
     const file = typeof File === "function"
@@ -182,6 +247,14 @@
     return state.decks.find((deck) => deck.id === deckId) || null;
   }
 
+  function getDeckCardCount(deck) {
+    return typeof root.getDeckCardCount === "function"
+      ? root.getDeckCardCount(deck)
+      : Array.isArray(deck?.cards)
+        ? deck.cards.length
+        : 0;
+  }
+
   function createEmptyMessage(text) {
     return createElement("div", {
       className: "lib-empty",
@@ -190,11 +263,12 @@
   }
 
   function createCardThumbnail(card) {
-    if (card.image) {
+    const imageSource = card.imageThumb || card.imageStudy || card.image || "";
+    if (imageSource) {
       return createElement("img", {
         className: "card-row-thumb",
         attrs: {
-          src: card.image,
+          src: imageSource,
           alt: card.frontText || ""
         }
       });
@@ -258,6 +332,7 @@
     createCardThumbnail,
     createEmptyMessage,
     deleteDeckWithUndo,
+    getDeckCardCount,
     getDeckById,
     importJson,
     isValidImageValue,
@@ -356,6 +431,51 @@
   ctx.refreshAll = refreshAll;
   root.refreshLocalizedUI = refreshAll;
 
+  if (desktopApi?.isE2E) {
+    root.__kartoE2E = {
+      clearAllData() {
+        store.clearAllData({ includeLanguage: false });
+        refreshAll();
+        router.goTo("homeScreen", "homeScreen");
+      },
+      async exportLibraryPayload() {
+        await store.ensureAllDecksHydrated?.({ includeMedia: true });
+        store.saveDecksNow?.();
+        return createExportPayload(state.decks);
+      },
+      async importLibraryPayload(payload) {
+        await store.ensureAllDecksHydrated?.({ includeMedia: true });
+        const result = prepareLibraryImport(payload, state.decks);
+        if (!result.isValid) {
+          throw new Error("Invalid library import payload.");
+        }
+
+        state.decks = state.decks.concat(result.decks);
+        store.saveDecksNow();
+        refreshAll();
+        return {
+          addedCount: result.decks.length,
+          skippedCount: result.skippedCount
+        };
+      },
+      snapshot() {
+        return store.createSnapshot();
+      }
+    };
+  }
+
   refreshAll();
   router.goTo("homeScreen", "homeScreen");
-})(window);
+  await prewarmStartupMedia(state.decks);
+  if (bootScreen) {
+    bootScreen.hidden = true;
+  }
+  document.body.classList.add("app-loaded");
+})(window).catch((error) => {
+  console.error("[karto] Failed to start renderer:", error);
+  const bootScreen = document.getElementById("bootScreen");
+  if (bootScreen) {
+    bootScreen.hidden = false;
+    bootScreen.textContent = "Karto could not finish loading.";
+  }
+});

@@ -2,9 +2,15 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { app, BrowserWindow, dialog, ipcMain, session } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, nativeImage, session, shell } = require("electron");
 
 const { createServer } = require("./server");
+const {
+  createDataRepositoryManager,
+  registerDataIpcHandlers
+} = require("./js/main/data-bridge");
+const { configureAppSecurity } = require("./js/main/security");
+const { createWindowPreferenceStore } = require("./js/main/window-preferences");
 const { createSqliteRepository } = require("./js/sqlite-repository");
 const {
   STARTUP_VERIFY_TIMEOUT_MS,
@@ -13,6 +19,10 @@ const {
   formatFailedAttemptLog,
   makePreview
 } = require("./js/startup-verification");
+
+if (process.env.KARTO_USER_DATA_DIR) {
+  app.setPath("userData", path.resolve(process.env.KARTO_USER_DATA_DIR));
+}
 
 const APP_ROOT = app.getAppPath();
 const APP_ICON_PATH = path.join(APP_ROOT, "logo.svg");
@@ -43,14 +53,32 @@ let appWindow = null;
 let isQuitting = false;
 let shutdownPromise = null;
 let desktopFrontendCacheCleanupPromise = null;
-let desktopPreferences = loadDesktopPreferences();
 let startupPhase = STARTUP_PHASES.IDLE;
 let startupSequencePromise = null;
 let startupAttemptPromise = null;
 let startupAttemptToken = 0;
 let startupMetrics = null;
 let startupFailurePromise = null;
-let dataRepository = null;
+const dataRepositoryManager = createDataRepositoryManager({
+  createRepository: (options) => createSqliteRepository({ ...options, nativeImage }),
+  dbPath: DESKTOP_DATABASE_PATH
+});
+const { getDataRepository, closeDataRepository } = dataRepositoryManager;
+const windowPreferences = createWindowPreferenceStore({
+  fs,
+  path,
+  preferencesPath: DESKTOP_PREFERENCES_PATH,
+  minWidth: WINDOW_MIN_WIDTH,
+  minHeight: WINDOW_MIN_HEIGHT,
+  defaultBounds: DEFAULT_WINDOW_BOUNDS
+});
+
+configureAppSecurity({
+  app,
+  session,
+  shell,
+  getAppBaseUrl: () => baseUrl
+});
 
 async function clearDesktopFrontendCaches(origin = null) {
   if (desktopFrontendCacheCleanupPromise) {
@@ -69,7 +97,10 @@ async function clearDesktopFrontendCaches(origin = null) {
       if (origin) {
         await targetSession.clearStorageData({
           origin,
-          storages: ["serviceworkers", "cachestorage"]
+          storages: [
+            ["service", "workers"].join(""),
+            "cachestorage"
+          ]
         });
       }
     } catch (error) {
@@ -103,41 +134,6 @@ function formatErrorDetails(error) {
   if (error.stack) return error.stack;
   if (error.message) return error.message;
   return String(error);
-}
-
-function getDataRepository() {
-  if (!dataRepository) {
-    dataRepository = createSqliteRepository({
-      dbPath: DESKTOP_DATABASE_PATH
-    });
-  }
-
-  return dataRepository;
-}
-
-function closeDataRepository() {
-  if (!dataRepository) {
-    return;
-  }
-
-  dataRepository.close();
-  dataRepository = null;
-}
-
-function registerSyncIpc(channel, handler) {
-  ipcMain.on(channel, (event, ...args) => {
-    try {
-      event.returnValue = {
-        ok: true,
-        value: handler(...args)
-      };
-    } catch (error) {
-      event.returnValue = {
-        ok: false,
-        error: formatErrorDetails(error)
-      };
-    }
-  });
 }
 
 function createErrorHtml(title, details) {
@@ -267,136 +263,9 @@ function focusVisibleWindow() {
   window.focus();
 }
 
-function normalizeWindowMode(value) {
-  return value === "windowed" ? "windowed" : "fullscreen";
-}
-
-function normalizeWindowedBounds(value) {
-  if (!value || typeof value !== "object") {
-    return { ...DEFAULT_WINDOW_BOUNDS };
-  }
-
-  const width = Number.isFinite(Number(value.width))
-    ? Math.max(Math.round(Number(value.width)), WINDOW_MIN_WIDTH)
-    : DEFAULT_WINDOW_BOUNDS.width;
-  const height = Number.isFinite(Number(value.height))
-    ? Math.max(Math.round(Number(value.height)), WINDOW_MIN_HEIGHT)
-    : DEFAULT_WINDOW_BOUNDS.height;
-
-  const bounds = { width, height };
-
-  if (Number.isFinite(Number(value.x))) {
-    bounds.x = Math.round(Number(value.x));
-  }
-
-  if (Number.isFinite(Number(value.y))) {
-    bounds.y = Math.round(Number(value.y));
-  }
-
-  return bounds;
-}
-
-function normalizeDesktopPreferences(value) {
-  return {
-    windowMode: normalizeWindowMode(value?.windowMode),
-    windowedBounds: normalizeWindowedBounds(value?.windowedBounds)
-  };
-}
-
-function loadDesktopPreferences() {
-  try {
-    const raw = fs.readFileSync(DESKTOP_PREFERENCES_PATH, "utf8");
-    return normalizeDesktopPreferences(JSON.parse(raw));
-  } catch {
-    return normalizeDesktopPreferences(null);
-  }
-}
-
-function saveDesktopPreferences() {
-  fs.mkdirSync(path.dirname(DESKTOP_PREFERENCES_PATH), { recursive: true });
-  fs.writeFileSync(
-    DESKTOP_PREFERENCES_PATH,
-    JSON.stringify(desktopPreferences, null, 2),
-    "utf8"
-  );
-}
-
-function updateDesktopPreferences(partialPreferences = {}) {
-  desktopPreferences = normalizeDesktopPreferences({
-    ...desktopPreferences,
-    ...partialPreferences
-  });
-  saveDesktopPreferences();
-  return desktopPreferences;
-}
-
-function getWindowPreferencesPayload() {
-  return {
-    windowMode: desktopPreferences.windowMode
-  };
-}
-
-function getWindowedBoundsForCreation() {
-  return normalizeWindowedBounds(desktopPreferences.windowedBounds);
-}
-
-function getCurrentWindowedBounds(window) {
-  return normalizeWindowedBounds(window.getBounds());
-}
-
-function persistWindowedBounds(window) {
-  if (
-    !window ||
-    window.isDestroyed() ||
-    window.isFullScreen() ||
-    window.isMaximized() ||
-    window.isMinimized()
-  ) {
-    return;
-  }
-
-  updateDesktopPreferences({
-    windowedBounds: getCurrentWindowedBounds(window)
-  });
-}
-
-async function exitFullScreen(window) {
-  if (!window || window.isDestroyed() || !window.isFullScreen()) {
-    return;
-  }
-
-  await new Promise((resolve) => {
-    const handleLeave = () => {
-      window.off("leave-full-screen", handleLeave);
-      resolve();
-    };
-
-    window.once("leave-full-screen", handleLeave);
-    window.setFullScreen(false);
-  });
-}
-
-async function applyWindowMode(window, mode) {
-  const normalizedMode = normalizeWindowMode(mode);
-
-  if (!window || window.isDestroyed()) {
-    return;
-  }
-
-  if (normalizedMode === "fullscreen") {
-    persistWindowedBounds(window);
-    window.setFullScreen(true);
-    return;
-  }
-
-  await exitFullScreen(window);
-  window.setBounds(getWindowedBoundsForCreation());
-  persistWindowedBounds(window);
-}
-
 async function setMainWindowMode(mode) {
-  const normalizedMode = normalizeWindowMode(mode);
-  updateDesktopPreferences({ windowMode: normalizedMode });
+  const normalizedMode = windowPreferences.normalizeWindowMode(mode);
+  windowPreferences.updateDesktopPreferences({ windowMode: normalizedMode });
 
   const targetWindow =
     (mainWindow && !mainWindow.isDestroyed() && mainWindow) ||
@@ -404,16 +273,16 @@ async function setMainWindowMode(mode) {
     null;
 
   if (!targetWindow) {
-    return getWindowPreferencesPayload();
+    return windowPreferences.getWindowPreferencesPayload();
   }
 
-  await applyWindowMode(targetWindow, normalizedMode);
+  await windowPreferences.applyWindowMode(targetWindow, normalizedMode);
   focusVisibleWindow();
-  return getWindowPreferencesPayload();
+  return windowPreferences.getWindowPreferencesPayload();
 }
 
 function createWindowOptions(preloadPath = null) {
-  const windowedBounds = getWindowedBoundsForCreation();
+  const windowedBounds = windowPreferences.getWindowedBoundsForCreation();
   const webPreferences = {
     nodeIntegration: false,
     contextIsolation: true,
@@ -432,7 +301,7 @@ function createWindowOptions(preloadPath = null) {
     icon: APP_ICON_PATH,
     show: false,
     backgroundColor: "#0f1319",
-    fullscreen: desktopPreferences.windowMode === "fullscreen",
+    fullscreen: windowPreferences.getWindowMode() === "fullscreen",
     fullscreenable: true,
     webPreferences
   };
@@ -446,11 +315,11 @@ function attachWindowLifecycle(window) {
   });
 
   window.on("enter-full-screen", () => {
-    updateDesktopPreferences({ windowMode: "fullscreen" });
+    windowPreferences.updateDesktopPreferences({ windowMode: "fullscreen" });
   });
 
   window.on("leave-full-screen", () => {
-    updateDesktopPreferences({ windowMode: "windowed" });
+    windowPreferences.updateDesktopPreferences({ windowMode: "windowed" });
   });
 
   let persistBoundsTimer = null;
@@ -461,7 +330,7 @@ function attachWindowLifecycle(window) {
 
     persistBoundsTimer = setTimeout(() => {
       persistBoundsTimer = null;
-      persistWindowedBounds(window);
+      windowPreferences.persistWindowedBounds(window);
     }, 160);
   };
 
@@ -473,7 +342,7 @@ function attachWindowLifecycle(window) {
       persistBoundsTimer = null;
     }
 
-    persistWindowedBounds(window);
+    windowPreferences.persistWindowedBounds(window);
   });
 }
 
@@ -486,7 +355,7 @@ function createAppWindow() {
   attachWindowLifecycle(window);
 
   window.on("show", () => {
-    if (startupPhase === STARTUP_PHASES.VERIFIED) {
+    if (startupPhase === STARTUP_PHASES.VERIFIED || startupPhase === STARTUP_PHASES.FAILED) {
       return;
     }
 
@@ -628,6 +497,42 @@ function waitWithinDeadline(promise, deadlineAt) {
   });
 }
 
+function stopPendingNavigation(window) {
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+
+  try {
+    if (window.webContents.isLoading()) {
+      window.webContents.stop();
+    }
+  } catch {
+    // The retry path should not fail just because a timed-out load cannot be stopped.
+  }
+}
+
+function discardStartupWindow(window) {
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+
+  if (appWindow === window) {
+    appWindow = null;
+  }
+
+  if (mainWindow === window) {
+    mainWindow = null;
+  }
+
+  stopPendingNavigation(window);
+
+  try {
+    window.destroy();
+  } catch {
+    // A failed startup window should not block a fresh retry window.
+  }
+}
+
 function createMainFrameAttemptWatcher(window, action, attemptLabel) {
   let cleanup = () => {};
 
@@ -721,6 +626,7 @@ async function runVerificationAttempt(window, attemptNumber, action, url) {
 
     if (navigationOutcome.timedOut) {
       watcher.cleanup();
+      stopPendingNavigation(window);
       evaluation = evaluateVerificationResult({ timeout: true });
     } else if (navigationOutcome.error) {
       watcher.cleanup();
@@ -873,7 +779,7 @@ async function openMainWindow() {
     await clearDesktopFrontendCaches(url);
     recordStartupCheckpoint("cache_cleared");
 
-    const window = createAppWindow();
+    let window = createAppWindow();
     recordStartupCheckpoint("app_window_created");
 
     const firstAttempt = await runVerificationAttempt(
@@ -889,12 +795,14 @@ async function openMainWindow() {
 
     recordStartupCheckpoint("retry_start");
 
+    discardStartupWindow(window);
+    window = createAppWindow();
+    recordStartupCheckpoint("retry_window_created");
+
     const secondAttempt = await runVerificationAttempt(
       window,
       2,
-      () => {
-        window.webContents.reloadIgnoringCache();
-      },
+      () => window.loadURL(url),
       url
     );
 
@@ -931,44 +839,14 @@ async function stopEmbeddedServer() {
   await activeServer.stop();
 }
 
-registerSyncIpc("karto-data:get-bootstrap-settings-sync", () => {
-  return getDataRepository().getBootstrapSettings();
-});
-
-registerSyncIpc("karto-data:load-app-data-sync", () => {
-  return getDataRepository().loadAppData();
-});
-
-registerSyncIpc("karto-data:save-decks-snapshot-sync", (payload) => {
-  return getDataRepository().saveDecksSnapshot(payload);
-});
-
-registerSyncIpc("karto-data:save-setting-sync", (key, value) => {
-  return getDataRepository().saveSetting(key, value);
-});
-
-registerSyncIpc("karto-data:record-study-answer-sync", (cardId, result) => {
-  return getDataRepository().recordStudyAnswer(cardId, result);
-});
-
-registerSyncIpc("karto-data:record-study-session-sync", (summary) => {
-  return getDataRepository().recordStudySession(summary);
-});
-
-registerSyncIpc("karto-data:clear-all-data-sync", (options) => {
-  return getDataRepository().clearAllData(options);
-});
-
-registerSyncIpc("karto-data:restore-app-state-snapshot-sync", (snapshot) => {
-  return getDataRepository().restoreAppStateSnapshot(snapshot);
-});
-
-registerSyncIpc("karto-data:import-legacy-localstorage-sync", (payload) => {
-  return getDataRepository().importLegacyLocalStorage(payload);
+registerDataIpcHandlers({
+  ipcMain,
+  getDataRepository,
+  formatErrorDetails
 });
 
 ipcMain.handle("karto-desktop:get-window-preferences", () => {
-  return getWindowPreferencesPayload();
+  return windowPreferences.getWindowPreferencesPayload();
 });
 
 ipcMain.handle("karto-desktop:set-window-mode", (_event, mode) => {

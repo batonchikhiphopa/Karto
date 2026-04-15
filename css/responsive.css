@@ -1,0 +1,203 @@
+@media (max-width: 980px) {
+  .mobile-topbar {
+    display: flex;
+  }
+
+  .app-shell {
+    display: block;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    z-index: 40;
+  }
+
+  body.sidebar-open .sidebar {
+    transform: translateX(0);
+    box-shadow: 20px 0 60px rgba(0,0,0,0.2);
+  }
+
+  .sidebar-close {
+    display: inline-flex;
+  }
+
+  .main {
+    padding-top: 20px;
+  }
+
+  .screen {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 860px) {
+  .study-card {
+    width: min(94vw, 960px);
+  }
+}
+
+@media (max-width: 720px) {
+  .main {
+    padding: 20px 16px 32px;
+  }
+
+  .deck-grid {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+  }
+
+  .card-row {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+
+  .card-row-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .card-row-inline-move {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .card-row-move-select {
+    width: 100%;
+  }
+
+  .screen-header-closeable {
+    gap: 16px;
+  }
+
+  .screen-header-top {
+    gap: 16px;
+  }
+
+  .editdeck-header-top {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .editdeck-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+
+  .screen-title-row {
+    align-items: flex-start;
+  }
+
+  .form-label-row {
+    align-items: flex-start;
+  }
+
+  .field-side-tools,
+  .image-side-toggle {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .study-card-area {
+    padding: 80px 16px 110px;
+  }
+
+  .deck-tile,
+  .create-tile {
+    width: 100%;
+    max-width: none;
+    justify-self: stretch;
+  }
+
+  .study-card {
+    max-height: calc(100vh - 132px);
+  }
+
+  .study-card-content {
+    max-height: calc(100vh - 132px);
+    gap: 18px;
+  }
+
+  .study-card-media {
+    width: 100%;
+    padding: 0;
+  }
+
+  .study-card-copy,
+  .study-card.is-layout-side .study-card-copy {
+    align-items: center;
+    text-align: center;
+  }
+
+  .study-front-text.has-media {
+    font-size: clamp(2.3rem, 8.4vw, 4.2rem);
+    max-width: 100%;
+  }
+
+  .study-back-text.has-media,
+  .study-card.is-layout-side .study-back-text.has-media {
+    font-size: clamp(1.45rem, 4.8vw, 2.35rem);
+    max-width: 100%;
+  }
+
+  .lib-deck-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .lib-deck-row-count {
+    order: 3;
+    width: 100%;
+  }
+
+  .lib-deck-row-actions {
+    width: 100%;
+    order: 2;
+    justify-content: flex-start;
+  }
+
+  .study-edge-left,
+  .study-edge-right {
+    width: 90px;
+  }
+
+  .study-edge-top {
+    height: 86px;
+  }
+
+  .study-edge-bottom {
+    height: 110px;
+  }
+
+  .toast-region {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+* {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}

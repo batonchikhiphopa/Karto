@@ -173,11 +173,6 @@
         ctx.store.setHomeGridColumns(nextSettings.homeGridColumns);
         ctx.store.setAutoGermanArticle(nextSettings.autoGermanArticle);
         ctx.store.setLanguagePreference(nextSettings.language);
-        if (ctx.desktopApi?.saveSettingSync) {
-          ctx.desktopApi.saveSettingSync("autoGermanArticle", nextSettings.autoGermanArticle);
-        } else {
-          localStorage.setItem("autoGermanArticle", JSON.stringify(nextSettings.autoGermanArticle));
-        }
         setLanguage(nextSettings.language, {
           persist: false,
           refresh: false

@@ -1,15 +1,6 @@
 (function(root) {
   const Karto = root.Karto || (root.Karto = {});
 
-  const STORAGE_KEYS = {
-    decks: "decks",
-    language: "language",
-    theme: "karto.theme",
-    homeGridColumns: "karto.homeGridColumns",
-    autoGermanArticle: "karto.autoGermanArticle",
-    studyProgress: "karto.studyProgress",
-    studySessions: "karto.studySessions"
-  };
   const MAX_ROUND_HISTORY_SESSIONS_PER_DECK = 5;
 
   function debounce(fn, wait) {
@@ -38,26 +29,12 @@
     return wrapped;
   }
 
-  function safeParse(rawValue, fallback) {
-    if (!rawValue) return fallback;
-
-    try {
-      return JSON.parse(rawValue);
-    } catch {
-      return fallback;
-    }
-  }
-
-  function getStorage() {
-    try {
-      return root.localStorage || null;
-    } catch {
-      return null;
-    }
-  }
-
   function getDesktopPersistence() {
-    return root.api && typeof root.api.loadAppDataSync === "function" ? root.api : null;
+    if (root.api && typeof root.api.loadAppDataSync === "function") {
+      return root.api;
+    }
+
+    throw new Error("Karto desktop persistence is unavailable.");
   }
 
   function normalizeThemePreference(value) {
@@ -205,6 +182,57 @@
     );
   }
 
+  function normalizeHomeMediaCacheEntry(entry) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return null;
+    }
+
+    const signature = typeof entry.signature === "string" ? entry.signature.trim() : "";
+    if (!signature) {
+      return null;
+    }
+
+    const seenImages = new Set();
+    const images = (Array.isArray(entry.images) ? entry.images : [])
+      .map((image) => (typeof image === "string" ? image.trim() : ""))
+      .filter((image) => {
+        if (!image || seenImages.has(image)) {
+          return false;
+        }
+
+        seenImages.add(image);
+        return true;
+      });
+
+    return {
+      signature,
+      images,
+      updatedAt: typeof entry.updatedAt === "string" && entry.updatedAt
+        ? entry.updatedAt
+        : new Date().toISOString()
+    };
+  }
+
+  function normalizeHomeMediaCache(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return {};
+    }
+
+    return Object.entries(value).reduce((result, [deckId, entry]) => {
+      if (typeof deckId !== "string" || !deckId.trim()) {
+        return result;
+      }
+
+      const normalizedEntry = normalizeHomeMediaCacheEntry(entry);
+      if (!normalizedEntry) {
+        return result;
+      }
+
+      result[deckId] = normalizedEntry;
+      return result;
+    }, {});
+  }
+
   function getCompletedRoundsForDeck(sessions, deckId) {
     if (typeof deckId !== "string" || !deckId.trim()) {
       return 0;
@@ -215,8 +243,15 @@
       .reduce((sum, session) => sum + session.completedRounds, 0);
   }
 
+  function getDeckCardCount(deck) {
+    if (typeof root.getDeckCardCount === "function") {
+      return root.getDeckCardCount(deck);
+    }
+
+    return Array.isArray(deck?.cards) ? deck.cards.length : 0;
+  }
+
   function createAppState() {
-    const storage = getStorage();
     const desktopPersistence = getDesktopPersistence();
 
     const state = {
@@ -230,16 +265,19 @@
         editDeckId: null,
         editCardId: null,
         imageSide: "back",
-        imageTargetSide: "back"
+        imageTargetSide: "back",
+        imageThumb: "",
+        imageStudy: ""
       },
       studyMode: "all",
       study: root.createStudyState({ cards: [] }),
       studyProgress: {},
       studySessions: [],
+      homeMediaCache: {},
       languagePreference: resolveLanguagePreference(null),
-      themePreference: normalizeThemePreference(storage?.getItem?.(STORAGE_KEYS.theme)),
-      homeGridColumns: normalizeHomeGridColumns(storage?.getItem?.(STORAGE_KEYS.homeGridColumns)),
-      autoGermanArticle: safeParse(storage?.getItem?.(STORAGE_KEYS.autoGermanArticle), true),
+      themePreference: "system",
+      homeGridColumns: "auto",
+      autoGermanArticle: true,
       openMoveCardId: null,
       pendingMoveDeckId: ""
     };
@@ -253,148 +291,276 @@
       documentElement.dataset.theme = state.themePreference;
     }
 
-    function createLegacyPayload() {
-      return {
-        decks: root.normalizeStoredDecks(safeParse(storage?.getItem?.(STORAGE_KEYS.decks), null)),
-        languagePreference: normalizeLanguagePreference(storage?.getItem?.(STORAGE_KEYS.language)),
-        themePreference: normalizeThemePreference(storage?.getItem?.(STORAGE_KEYS.theme)),
-        homeGridColumns: normalizeHomeGridColumns(storage?.getItem?.(STORAGE_KEYS.homeGridColumns)),
-        autoGermanArticle: safeParse(storage?.getItem?.(STORAGE_KEYS.autoGermanArticle), true),
-        studyProgress: normalizeLoadedStudyProgress(safeParse(storage?.getItem?.(STORAGE_KEYS.studyProgress), {})),
-        studySessions: normalizeLoadedStudySessions(safeParse(storage?.getItem?.(STORAGE_KEYS.studySessions), []))
-      };
-    }
-
-    function clearLegacyStorage() {
-      if (!storage) {
-        return;
-      }
-
-      Object.values(STORAGE_KEYS).forEach((key) => {
-        storage.removeItem?.(key);
-      });
-    }
-
     function loadFromDesktopPersistence() {
-      const migrationResult = desktopPersistence.importLegacyLocalStorageSync(createLegacyPayload());
-
-      if (migrationResult?.clearLegacyStorage) {
-        clearLegacyStorage();
-      }
-
-      return migrationResult?.appData || desktopPersistence.loadAppDataSync();
+      return desktopPersistence.loadAppDataSync();
     }
 
-    function loadFromBrowserStorage() {
-      return {
-        decks: root.normalizeStoredDecks(safeParse(storage?.getItem?.(STORAGE_KEYS.decks), null)),
-        languagePreference: resolveLanguagePreference(
-          storage?.getItem?.(STORAGE_KEYS.language) ||
-          root.resolveInitialLanguage?.({
-            storage,
-            navigator: root.navigator
-          })
-        ),
-        themePreference: normalizeThemePreference(storage?.getItem?.(STORAGE_KEYS.theme)),
-        homeGridColumns: normalizeHomeGridColumns(storage?.getItem?.(STORAGE_KEYS.homeGridColumns)),
-        autoGermanArticle: safeParse(storage?.getItem?.(STORAGE_KEYS.autoGermanArticle), true),
-        studyProgress: normalizeLoadedStudyProgress(safeParse(storage?.getItem?.(STORAGE_KEYS.studyProgress), {})),
-        studySessions: normalizeLoadedStudySessions(safeParse(storage?.getItem?.(STORAGE_KEYS.studySessions), []))
-      };
+    async function loadShellFromDesktopPersistence() {
+      if (typeof desktopPersistence.loadAppShellData === "function") {
+        return desktopPersistence.loadAppShellData();
+      }
+
+      return desktopPersistence.loadAppDataSync();
     }
 
     function saveDecksNow() {
-      if (desktopPersistence) {
-        desktopPersistence.saveDecksSnapshotSync(root.createStoragePayload(state.decks));
-        return;
+      const persistedDecks = desktopPersistence.saveDecksSnapshotSync(root.createStoragePayload(state.decks));
+      const normalizedDecks = root.normalizeStoredDecks(persistedDecks);
+      if (normalizedDecks.length > 0 || state.decks.length === 0) {
+        state.decks = normalizedDecks;
       }
-
-      storage?.setItem?.(STORAGE_KEYS.decks, JSON.stringify(root.createStoragePayload(state.decks)));
     }
 
     const saveDecksSoon = debounce(saveDecksNow, 120);
 
     function persistStudyProgress() {
-      if (desktopPersistence) {
-        desktopPersistence.restoreAppStateSnapshotSync(createSnapshot());
-        return;
-      }
-
-      storage?.setItem?.(STORAGE_KEYS.studyProgress, JSON.stringify(state.studyProgress));
+      desktopPersistence.restoreAppStateSnapshotSync(createSnapshot());
     }
 
     function persistStudySessions() {
-      if (desktopPersistence) {
-        desktopPersistence.restoreAppStateSnapshotSync(createSnapshot());
-        return;
-      }
-
-      storage?.setItem?.(STORAGE_KEYS.studySessions, JSON.stringify(state.studySessions));
+      desktopPersistence.restoreAppStateSnapshotSync(createSnapshot());
     }
 
-    function load() {
-      const payload = desktopPersistence
-        ? loadFromDesktopPersistence()
-        : loadFromBrowserStorage();
-
+    function applyLoadedPayload(payload) {
       state.decks = root.normalizeStoredDecks(payload.decks);
       state.languagePreference = resolveLanguagePreference(payload.languagePreference);
       state.themePreference = normalizeThemePreference(payload.themePreference);
       state.homeGridColumns = normalizeHomeGridColumns(payload.homeGridColumns);
       state.autoGermanArticle = payload.autoGermanArticle !== false;
+      state.homeMediaCache = normalizeHomeMediaCache(payload.homeMediaCache);
       state.studyProgress = normalizeLoadedStudyProgress(payload.studyProgress);
       state.studySessions = normalizeLoadedStudySessions(payload.studySessions);
-
-      if (!desktopPersistence) {
-        saveDecksNow();
-        storage?.setItem?.(STORAGE_KEYS.studySessions, JSON.stringify(state.studySessions));
-      }
 
       applyTheme();
     }
 
+    function load() {
+      const payload = loadFromDesktopPersistence();
+      applyLoadedPayload(payload);
+    }
+
+    async function loadShell() {
+      const payload = await loadShellFromDesktopPersistence();
+      applyLoadedPayload(payload);
+    }
+
     function setThemePreference(value) {
       state.themePreference = normalizeThemePreference(value);
-
-      if (desktopPersistence) {
-        desktopPersistence.saveSettingSync("theme", state.themePreference);
-      } else {
-        storage?.setItem?.(STORAGE_KEYS.theme, state.themePreference);
-      }
-
+      desktopPersistence.saveSettingSync("theme", state.themePreference);
       applyTheme();
     }
 
     function setHomeGridColumns(value) {
       state.homeGridColumns = normalizeHomeGridColumns(value);
-
-      if (desktopPersistence) {
-        desktopPersistence.saveSettingSync("homeGridColumns", state.homeGridColumns);
-      } else {
-        storage?.setItem?.(STORAGE_KEYS.homeGridColumns, state.homeGridColumns);
-      }
+      desktopPersistence.saveSettingSync("homeGridColumns", state.homeGridColumns);
     }
 
     function setAutoGermanArticle(value) {
       state.autoGermanArticle = value !== false;
-
-      if (desktopPersistence) {
-        desktopPersistence.saveSettingSync("autoGermanArticle", state.autoGermanArticle);
-      } else {
-        storage?.setItem?.(STORAGE_KEYS.autoGermanArticle, JSON.stringify(state.autoGermanArticle));
-      }
+      desktopPersistence.saveSettingSync("autoGermanArticle", state.autoGermanArticle);
     }
 
     function setLanguagePreference(value) {
       state.languagePreference = resolveLanguagePreference(value);
+      desktopPersistence.saveSettingSync("language", state.languagePreference);
+      return state.languagePreference;
+    }
 
-      if (desktopPersistence) {
-        desktopPersistence.saveSettingSync("language", state.languagePreference);
-      } else {
-        storage?.setItem?.(STORAGE_KEYS.language, state.languagePreference);
+    function persistHomeMediaCache() {
+      desktopPersistence.saveSettingSync("homeMediaCache", JSON.stringify(state.homeMediaCache));
+    }
+
+    function getHomeMediaCacheEntry(deckId) {
+      if (typeof deckId !== "string" || !deckId.trim()) {
+        return null;
       }
 
-      return state.languagePreference;
+      const entry = normalizeHomeMediaCacheEntry(state.homeMediaCache[deckId]);
+      return entry
+        ? {
+          signature: entry.signature,
+          images: entry.images.slice(),
+          updatedAt: entry.updatedAt
+        }
+        : null;
+    }
+
+    function setHomeMediaCacheEntry(deckId, entry) {
+      if (typeof deckId !== "string" || !deckId.trim()) {
+        return;
+      }
+
+      const normalizedEntry = normalizeHomeMediaCacheEntry(entry);
+      if (normalizedEntry) {
+        state.homeMediaCache[deckId] = normalizedEntry;
+      } else {
+        delete state.homeMediaCache[deckId];
+      }
+
+      persistHomeMediaCache();
+    }
+
+    function deleteHomeMediaCacheEntry(deckId) {
+      if (typeof deckId !== "string" || !deckId.trim() || !Object.hasOwn(state.homeMediaCache, deckId)) {
+        return;
+      }
+
+      delete state.homeMediaCache[deckId];
+      persistHomeMediaCache();
+    }
+
+    function pruneHomeMediaCache(validDeckIds) {
+      const validIds = validDeckIds instanceof Set
+        ? validDeckIds
+        : new Set(Array.isArray(validDeckIds) ? validDeckIds : []);
+      let didChange = false;
+
+      Object.keys(state.homeMediaCache).forEach((deckId) => {
+        if (!validIds.has(deckId)) {
+          delete state.homeMediaCache[deckId];
+          didChange = true;
+        }
+      });
+
+      if (didChange) {
+        persistHomeMediaCache();
+      }
+    }
+
+    function findDeckIndex(deckId) {
+      return state.decks.findIndex((deck) => deck.id === deckId);
+    }
+
+    function mergeLoadedDeck(deckPayload) {
+      const normalizedDeck = root.normalizeDeck?.(deckPayload);
+      if (!normalizedDeck) {
+        return null;
+      }
+
+      const deckIndex = findDeckIndex(normalizedDeck.id);
+      if (deckIndex === -1) {
+        state.decks.push(normalizedDeck);
+        return normalizedDeck;
+      }
+
+      const existingDeck = state.decks[deckIndex];
+      const existingCardsById = new Map((existingDeck.cards || []).map((card) => [card.id, card]));
+      const mergedCards = normalizedDeck.cards.map((card) => ({
+        ...existingCardsById.get(card.id),
+        ...card
+      }));
+
+      state.decks[deckIndex] = {
+        ...existingDeck,
+        ...normalizedDeck,
+        cards: mergedCards,
+        cardCount: Math.max(normalizedDeck.cardCount, mergedCards.length),
+        cardsHydrated: normalizedDeck.cardsHydrated === true
+      };
+
+      return state.decks[deckIndex];
+    }
+
+    async function ensureDeckHydrated(deckId, options = {}) {
+      const deck = state.decks.find((item) => item.id === deckId) || null;
+      if (!deck) {
+        return null;
+      }
+
+      const includeMedia = options.includeMedia === true;
+      if (deck.cardsHydrated === true && (!includeMedia || deck.cards.every((card) => card.mediaLoaded !== false))) {
+        return deck;
+      }
+
+      if (typeof desktopPersistence.loadDeckCards !== "function") {
+        deck.cardsHydrated = true;
+        deck.cardCount = getDeckCardCount(deck);
+        return deck;
+      }
+
+      const loadedDeck = await desktopPersistence.loadDeckCards(deckId, { includeMedia });
+      return mergeLoadedDeck(loadedDeck);
+    }
+
+    async function ensureAllDecksHydrated(options = {}) {
+      const deckIds = state.decks.map((deck) => deck.id);
+      for (const deckId of deckIds) {
+        await ensureDeckHydrated(deckId, options);
+      }
+
+      return state.decks;
+    }
+
+    function mergeLoadedCardMedia(cards) {
+      const normalizedCards = (Array.isArray(cards) ? cards : [])
+        .map((card) => root.normalizeCard?.(card))
+        .filter(Boolean);
+
+      if (normalizedCards.length === 0) {
+        return [];
+      }
+
+      const cardsById = new Map(normalizedCards.map((card) => [card.id, card]));
+      state.decks.forEach((deck) => {
+        deck.cards = (deck.cards || []).map((card) => {
+          const mediaCard = cardsById.get(card.id);
+          return mediaCard
+            ? {
+              ...card,
+              image: mediaCard.image,
+              imageThumb: mediaCard.imageThumb || card.imageThumb || "",
+              imageStudy: mediaCard.imageStudy || card.imageStudy || "",
+              imageSide: mediaCard.imageSide,
+              hasImage: mediaCard.hasImage,
+              mediaLoaded: true
+            }
+            : card;
+        });
+      });
+
+      return normalizedCards;
+    }
+
+    async function loadCardMedia(cardIds) {
+      const normalizedIds = Array.isArray(cardIds)
+        ? cardIds
+          .map((cardId) => (typeof cardId === "string" ? cardId.trim() : ""))
+          .filter(Boolean)
+        : [];
+
+      if (normalizedIds.length === 0) {
+        return [];
+      }
+
+      if (typeof desktopPersistence.loadCardMedia !== "function") {
+        return [];
+      }
+
+      return mergeLoadedCardMedia(await desktopPersistence.loadCardMedia(Array.from(new Set(normalizedIds))));
+    }
+
+    function getStudyProgressEntry(cardId) {
+      if (typeof cardId !== "string" || !cardId.trim()) {
+        return null;
+      }
+
+      const entry = normalizeStudyProgressEntry(state.studyProgress[cardId]);
+      return entry ? { ...entry } : null;
+    }
+
+    function restoreStudyProgressEntry(cardId, entry) {
+      if (typeof cardId !== "string" || !cardId.trim()) {
+        return;
+      }
+
+      const normalizedEntry = normalizeStudyProgressEntry(entry);
+      if (normalizedEntry) {
+        state.studyProgress[cardId] = normalizedEntry;
+      } else {
+        delete state.studyProgress[cardId];
+      }
+
+      persistStudyProgress();
     }
 
     function recordStudyAnswer(cardId, result) {
@@ -412,25 +578,14 @@
         lastReviewedAt: new Date().toISOString()
       };
 
-      if (desktopPersistence) {
-        desktopPersistence.recordStudyAnswerSync(cardId, result);
-        return;
-      }
-
-      storage?.setItem?.(STORAGE_KEYS.studyProgress, JSON.stringify(state.studyProgress));
+      desktopPersistence.recordStudyAnswerSync(cardId, result);
     }
 
     function recordStudySession(summary) {
       state.studySessions = normalizeLoadedStudySessions([summary].concat(state.studySessions));
-
-      if (desktopPersistence) {
-        state.studySessions = normalizeLoadedStudySessions(
-          desktopPersistence.recordStudySessionSync(summary)
-        );
-        return;
-      }
-
-      storage?.setItem?.(STORAGE_KEYS.studySessions, JSON.stringify(state.studySessions));
+      state.studySessions = normalizeLoadedStudySessions(
+        desktopPersistence.recordStudySessionSync(summary)
+      );
     }
 
     function createSnapshot() {
@@ -438,6 +593,7 @@
         decks: root.createStoragePayload(state.decks),
         studyProgress: JSON.parse(JSON.stringify(state.studyProgress)),
         studySessions: JSON.parse(JSON.stringify(state.studySessions)),
+        homeMediaCache: JSON.parse(JSON.stringify(state.homeMediaCache)),
         themePreference: state.themePreference,
         homeGridColumns: state.homeGridColumns,
         autoGermanArticle: state.autoGermanArticle,
@@ -450,36 +606,22 @@
         decks: snapshot.decks,
         studyProgress: snapshot.studyProgress || {},
         studySessions: Array.isArray(snapshot.studySessions) ? snapshot.studySessions : [],
+        homeMediaCache: normalizeHomeMediaCache(snapshot.homeMediaCache),
         themePreference: snapshot.themePreference || "system",
         homeGridColumns: snapshot.homeGridColumns || "auto",
         autoGermanArticle: snapshot.autoGermanArticle !== false,
         languagePreference: snapshot.languagePreference || snapshot.language || resolveLanguagePreference(null)
       };
 
-      if (desktopPersistence) {
-        const restoredData = desktopPersistence.restoreAppStateSnapshotSync(nextSnapshot);
-        state.decks = root.normalizeStoredDecks(restoredData.decks);
-        state.studyProgress = normalizeLoadedStudyProgress(restoredData.studyProgress);
-        state.studySessions = normalizeLoadedStudySessions(restoredData.studySessions);
-        state.themePreference = normalizeThemePreference(restoredData.themePreference);
-        state.homeGridColumns = normalizeHomeGridColumns(restoredData.homeGridColumns);
-        state.autoGermanArticle = restoredData.autoGermanArticle !== false;
-        state.languagePreference = resolveLanguagePreference(restoredData.languagePreference);
-      } else {
-        state.decks = root.normalizeStoredDecks(nextSnapshot.decks);
-        saveDecksNow();
-
-        state.studyProgress = nextSnapshot.studyProgress || {};
-        storage?.setItem?.(STORAGE_KEYS.studyProgress, JSON.stringify(state.studyProgress));
-
-        state.studySessions = normalizeLoadedStudySessions(nextSnapshot.studySessions);
-        storage?.setItem?.(STORAGE_KEYS.studySessions, JSON.stringify(state.studySessions));
-
-        setThemePreference(nextSnapshot.themePreference);
-        setHomeGridColumns(nextSnapshot.homeGridColumns);
-        setAutoGermanArticle(nextSnapshot.autoGermanArticle);
-        setLanguagePreference(nextSnapshot.languagePreference);
-      }
+      const restoredData = desktopPersistence.restoreAppStateSnapshotSync(nextSnapshot);
+      state.decks = root.normalizeStoredDecks(restoredData.decks);
+      state.studyProgress = normalizeLoadedStudyProgress(restoredData.studyProgress);
+      state.studySessions = normalizeLoadedStudySessions(restoredData.studySessions);
+      state.homeMediaCache = normalizeHomeMediaCache(restoredData.homeMediaCache);
+      state.themePreference = normalizeThemePreference(restoredData.themePreference);
+      state.homeGridColumns = normalizeHomeGridColumns(restoredData.homeGridColumns);
+      state.autoGermanArticle = restoredData.autoGermanArticle !== false;
+      state.languagePreference = resolveLanguagePreference(restoredData.languagePreference);
 
       applyTheme();
       root.setLanguage(state.languagePreference, {
@@ -492,37 +634,19 @@
       const includeLanguage = options.includeLanguage !== false;
       const nextLanguage = includeLanguage ? resolveLanguagePreference(null) : state.languagePreference;
 
-      if (desktopPersistence) {
-        const clearedData = desktopPersistence.clearAllDataSync({ includeLanguage });
-        state.decks = root.normalizeStoredDecks(clearedData.decks);
-        state.studyProgress = normalizeLoadedStudyProgress(clearedData.studyProgress);
-        state.studySessions = normalizeLoadedStudySessions(clearedData.studySessions);
-        state.themePreference = normalizeThemePreference(clearedData.themePreference);
-        state.homeGridColumns = normalizeHomeGridColumns(clearedData.homeGridColumns);
-        state.languagePreference = includeLanguage
-          ? resolveLanguagePreference(clearedData.languagePreference)
-          : nextLanguage;
+      const clearedData = desktopPersistence.clearAllDataSync({ includeLanguage });
+      state.decks = root.normalizeStoredDecks(clearedData.decks);
+      state.studyProgress = normalizeLoadedStudyProgress(clearedData.studyProgress);
+      state.studySessions = normalizeLoadedStudySessions(clearedData.studySessions);
+      state.homeMediaCache = normalizeHomeMediaCache(clearedData.homeMediaCache);
+      state.themePreference = normalizeThemePreference(clearedData.themePreference);
+      state.homeGridColumns = normalizeHomeGridColumns(clearedData.homeGridColumns);
+      state.languagePreference = includeLanguage
+        ? resolveLanguagePreference(clearedData.languagePreference)
+        : nextLanguage;
 
-        if (!includeLanguage) {
-          desktopPersistence.saveSettingSync("language", state.languagePreference);
-        }
-      } else {
-        storage?.removeItem?.(STORAGE_KEYS.decks);
-        storage?.removeItem?.(STORAGE_KEYS.studyProgress);
-        storage?.removeItem?.(STORAGE_KEYS.studySessions);
-        storage?.removeItem?.(STORAGE_KEYS.theme);
-        storage?.removeItem?.(STORAGE_KEYS.homeGridColumns);
-        storage?.removeItem?.(STORAGE_KEYS.autoGermanArticle);
-
-        if (includeLanguage) {
-          storage?.removeItem?.(STORAGE_KEYS.language);
-        }
-
-        state.languagePreference = nextLanguage;
-
-        if (!includeLanguage) {
-          storage?.setItem?.(STORAGE_KEYS.language, state.languagePreference);
-        }
+      if (!includeLanguage) {
+        desktopPersistence.saveSettingSync("language", state.languagePreference);
       }
 
       state.decks = [];
@@ -533,10 +657,13 @@
       state.cardForm.editCardId = null;
       state.cardForm.imageSide = "back";
       state.cardForm.imageTargetSide = "back";
+      state.cardForm.imageThumb = "";
+      state.cardForm.imageStudy = "";
       state.studyMode = "all";
       state.study = root.createStudyState({ cards: [] });
       state.studyProgress = {};
       state.studySessions = [];
+      state.homeMediaCache = {};
       state.themePreference = "system";
       state.homeGridColumns = "auto";
       state.autoGermanArticle = true;
@@ -549,9 +676,9 @@
     });
 
     return {
-      STORAGE_KEYS,
       state,
       load,
+      loadShell,
       saveDecksNow,
       saveDecksSoon,
       persistStudyProgress,
@@ -561,6 +688,15 @@
       setHomeGridColumns,
       setAutoGermanArticle,
       setLanguagePreference,
+      getHomeMediaCacheEntry,
+      setHomeMediaCacheEntry,
+      deleteHomeMediaCacheEntry,
+      pruneHomeMediaCache,
+      ensureDeckHydrated,
+      ensureAllDecksHydrated,
+      loadCardMedia,
+      getStudyProgressEntry,
+      restoreStudyProgressEntry,
       recordStudyAnswer,
       recordStudySession,
       createSnapshot,
@@ -570,9 +706,9 @@
   }
 
   Karto.createAppState = createAppState;
-  Karto.STORAGE_KEYS = STORAGE_KEYS;
   Karto.MAX_ROUND_HISTORY_SESSIONS_PER_DECK = MAX_ROUND_HISTORY_SESSIONS_PER_DECK;
   Karto.getCompletedRoundsForDeck = getCompletedRoundsForDeck;
   Karto.normalizeLoadedStudySessions = normalizeLoadedStudySessions;
+  Karto.normalizeHomeMediaCache = normalizeHomeMediaCache;
   Karto.normalizeHomeGridColumns = normalizeHomeGridColumns;
 })(typeof window !== "undefined" ? window : globalThis);

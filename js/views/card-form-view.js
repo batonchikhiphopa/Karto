@@ -98,20 +98,12 @@
       return frontInput.value.trim();
     }
 
-    function optimizeUnsplashUrl(url) {
-      if (!url || !url.includes("images.unsplash.com")) {
-        return url;
-      }
+    function deriveFormImageThumb(value) {
+      return Karto.deriveTileImageUrl?.(value) || "";
+    }
 
-      try {
-        const parsed = new URL(url);
-        parsed.searchParams.set("w", "1200");
-        parsed.searchParams.set("q", "80");
-        parsed.searchParams.set("fm", "webp");
-        return parsed.toString();
-      } catch {
-        return url;
-      }
+    function deriveFormStudyImage(value) {
+      return Karto.deriveStudyImageUrl?.(value) || value;
     }
 
     function showImagePreview(src) {
@@ -125,9 +117,19 @@
       fileInput.value = "";
     }
 
-    function applyImageValue(value) {
+    function applyImageValue(value, imageThumb, imageStudy) {
       ensureFormState();
       ctx.state.cardForm.imageSide = normalizeSide(ctx.state.cardForm.imageTargetSide);
+      ctx.state.cardForm.imageThumb = value
+        ? typeof imageThumb === "string"
+          ? imageThumb
+          : deriveFormImageThumb(value)
+        : "";
+      ctx.state.cardForm.imageStudy = value
+        ? typeof imageStudy === "string"
+          ? imageStudy
+          : deriveFormStudyImage(value)
+        : "";
       imageInput.value = value;
 
       if (value) {
@@ -241,11 +243,16 @@
       closeMenus();
     }
 
-    function open(deckId, cardId, returnScreen) {
+    async function open(deckId, cardId, returnScreen) {
       ctx.state.cardForm.returnScreen = returnScreen || "homeScreen";
       ctx.state.cardForm.editDeckId = deckId;
       ctx.state.cardForm.editCardId = cardId;
       ensureFormState();
+
+      if (deckId !== null && cardId !== null) {
+        await ctx.store.ensureDeckHydrated?.(deckId);
+        await ctx.store.loadCardMedia?.([cardId]);
+      }
 
       populateDeckSelect(deckId);
       clearElement(imageResults);
@@ -259,13 +266,17 @@
 
         frontInput.value = card?.frontText || "";
         backInput.value = card?.backText || "";
-        imageInput.value = card?.image || "";
+        imageInput.value = card?.image || card?.imageStudy || "";
+        ctx.state.cardForm.imageThumb = card?.imageThumb || deriveFormImageThumb(card?.image || "");
+        ctx.state.cardForm.imageStudy = card?.imageStudy || deriveFormStudyImage(card?.image || "");
         ctx.state.cardForm.imageSide = normalizeSide(card?.imageSide);
         ctx.state.cardForm.imageTargetSide = ctx.state.cardForm.imageSide;
       } else {
         frontInput.value = "";
         backInput.value = "";
         imageInput.value = "";
+        ctx.state.cardForm.imageThumb = "";
+        ctx.state.cardForm.imageStudy = "";
         ctx.state.cardForm.imageSide = "back";
         ctx.state.cardForm.imageTargetSide = "back";
       }
@@ -296,20 +307,16 @@
       ctx.router.goTo(returnScreen, ctx.navTargetForScreen(returnScreen));
     }
 
-    function saveCard() {
+    async function saveCard() {
       const frontText = frontInput.value.trim();
       const backText = backInput.value.trim();
       const image = imageInput.value.trim();
+      const imageThumb = image ? ctx.state.cardForm.imageThumb || deriveFormImageThumb(image) : "";
+      const imageStudy = image ? ctx.state.cardForm.imageStudy || deriveFormStudyImage(image) : "";
       const imageSide = normalizeSide(ctx.state.cardForm.imageSide);
-      const targetDeck = ctx.getDeckById(deckSelect.value);
 
       if (!frontText || !backText) {
         ctx.toast.error(t("alerts.requiredFields"));
-        return;
-      }
-
-      if (!targetDeck) {
-        ctx.toast.error(t("alerts.chooseDeck"));
         return;
       }
 
@@ -318,10 +325,21 @@
         return;
       }
 
+      await ctx.store.ensureDeckHydrated?.(deckSelect.value);
+      if (ctx.state.cardForm.editDeckId) {
+        await ctx.store.ensureDeckHydrated?.(ctx.state.cardForm.editDeckId, { includeMedia: true });
+      }
+
+      const targetDeck = ctx.getDeckById(deckSelect.value);
+      if (!targetDeck) {
+        ctx.toast.error(t("alerts.chooseDeck"));
+        return;
+      }
+
       const editingDeck = ctx.getDeckById(ctx.state.cardForm.editDeckId);
       const editingCard = editingDeck?.cards.find((card) => card.id === ctx.state.cardForm.editCardId);
 
-      const savedCard = createCard({ frontText, backText, image, imageSide }, editingCard?.id || null);
+      const savedCard = createCard({ frontText, backText, image, imageThumb, imageStudy, imageSide }, editingCard?.id || null);
       if (!savedCard) {
         ctx.toast.error(t("alerts.requiredFields"));
         return;
@@ -513,7 +531,9 @@
               src: photo.small,
               alt: photo.alt || query,
               title: t("cardForm.imageSelectTitle"),
-              "data-regular": optimizeUnsplashUrl(photo.regular)
+              "data-regular": deriveFormStudyImage(photo.regular),
+              "data-thumb": deriveFormImageThumb(photo.small || photo.regular),
+              "data-study": deriveFormStudyImage(photo.regular)
             }
           }));
         });
@@ -570,10 +590,12 @@
 
       imageResults.querySelectorAll("img").forEach((item) => item.classList.remove("selected"));
       image.classList.add("selected");
-      applyImageValue(image.dataset.regular);
+      applyImageValue(image.dataset.regular, image.dataset.thumb || "", image.dataset.study || "");
     });
     imageInput.addEventListener("input", () => {
       const value = imageInput.value.trim();
+      ctx.state.cardForm.imageThumb = value ? deriveFormImageThumb(value) : "";
+      ctx.state.cardForm.imageStudy = value ? deriveFormStudyImage(value) : "";
       if (value) {
         showImagePreview(value);
       } else {
@@ -590,36 +612,31 @@
       if (!file) return;
 
       const targetSide = normalizeSide(ctx.state.cardForm.imageTargetSide);
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
       const image = new Image();
       const objectUrl = URL.createObjectURL(file);
 
       image.addEventListener("load", () => {
-        const maxSide = 800;
-        let width = image.width;
-        let height = image.height;
-
-        if (width > maxSide || height > maxSide) {
-          if (width > height) {
-            height = Math.round(height * maxSide / width);
-            width = maxSide;
-          } else {
-            width = Math.round(width * maxSide / height);
-            height = maxSide;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        context.drawImage(image, 0, 0, width, height);
-
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+        const studyImage = Karto.resizeImageElementToDataUrl(image, {
+          maxSide: Karto.STUDY_DATA_IMAGE_MAX_SIDE || 720,
+          quality: Karto.STUDY_IMAGE_QUALITY || 0.68,
+          mimeType: "image/jpeg"
+        });
+        const imageThumb = Karto.resizeImageElementToDataUrl(image, {
+          maxSide: Karto.TILE_THUMB_MAX_SIDE || 360,
+          quality: Karto.TILE_THUMB_QUALITY || 0.72,
+          mimeType: "image/jpeg"
+        });
         ctx.state.cardForm.imageTargetSide = targetSide;
-        applyImageValue(dataUrl);
+        applyImageValue(studyImage, imageThumb, "");
         URL.revokeObjectURL(objectUrl);
         fileInput.value = "";
       });
+
+      image.addEventListener("error", () => {
+        URL.revokeObjectURL(objectUrl);
+        fileInput.value = "";
+        ctx.toast.error(t("alerts.invalidImageUrl"));
+      }, { once: true });
 
       image.src = objectUrl;
     });

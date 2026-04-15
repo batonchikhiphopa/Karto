@@ -8,12 +8,14 @@ const electronPath = require("electron");
 
 const nodeTests = [
   "tests/data-model.test.js",
+  "tests/image-utils.test.js",
   "tests/study-engine.test.js",
   "tests/app-state.test.js",
   "tests/i18n.test.js",
   "tests/global-shortcuts.test.js",
   "tests/api.test.js",
   "tests/export-import.test.js",
+  "tests/static-quality.test.js",
   "tests/startup-verification.test.js",
   "tests/server.test.js"
 ];

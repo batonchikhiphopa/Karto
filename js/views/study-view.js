@@ -4,12 +4,56 @@
   function createStudyView(ctx) {
     const wrap = document.getElementById("studyWrap");
     const cardElement = document.getElementById("studyCard");
+    const exitStudyButton = document.getElementById("exitStudyBtn");
     const imageMetaCache = new Map();
-    const WARM_AHEAD_COUNT = 5;
+    const STUDY_PRELOAD_WINDOW = 5;
+    const EXIT_STUDY_SAFE_ZONE_PADDING = 112.5;
+    const STUDY_EDGE_THRESHOLD = 0.2;
+    const STUDY_EDGE_DELTA_EPSILON = 0.001;
+    const STUDY_EDGE_KEYS = ["left", "right", "bottom", "top"];
+    const STUDY_EDGE_CONFIG = {
+      left: {
+        glowVar: "--left-glow",
+        labelId: "wrongLabel",
+        action: () => answer("wrong")
+      },
+      right: {
+        glowVar: "--right-glow",
+        labelId: "correctLabel",
+        action: () => answer("correct")
+      },
+      bottom: {
+        glowVar: "--bottom-glow",
+        labelId: "unsureLabel",
+        action: () => answer("unsure")
+      },
+      top: {
+        glowVar: "--top-glow",
+        labelId: "backLabel",
+        action: goBack
+      }
+    };
     let resizeFrameId = null;
+    let activeStudyEdge = null;
+    let lastPointerScores = null;
+    let prepareToken = 0;
 
     function hasPendingAnswer() {
       return !!ctx.state.study.pendingAnswer;
+    }
+
+    function markCurrentBackShown() {
+      const card = getCurrentStudyCard(ctx.state.study);
+      ctx.state.study.backShownCardId = card?.id || null;
+    }
+
+    function hasCurrentBackBeenShown() {
+      const card = getCurrentStudyCard(ctx.state.study);
+      return !!card && ctx.state.study.backShownCardId === card.id;
+    }
+
+    function clearCurrentBackShown() {
+      ctx.state.study.backShownCardId = null;
     }
 
     function resetLabels() {
@@ -26,11 +70,127 @@
       wrap.style.setProperty("--right-glow", "0");
       wrap.style.setProperty("--bottom-glow", "0");
       wrap.style.setProperty("--top-glow", "0");
+      activeStudyEdge = null;
+      lastPointerScores = null;
       resetLabels();
     }
 
     function clamp(value, min, max) {
       return Math.max(min, Math.min(max, value));
+    }
+
+    function getPointerEdgeScores(event) {
+      const width = root.innerWidth;
+      const height = root.innerHeight;
+      const edge = 200;
+
+      return {
+        left: 1 - clamp(event.clientX / edge, 0, 1),
+        right: 1 - clamp((width - event.clientX) / edge, 0, 1),
+        bottom: 1 - clamp((height - event.clientY) / edge, 0, 1),
+        top: 1 - clamp(event.clientY / edge, 0, 1)
+      };
+    }
+
+    function isPointerInExitStudySafeZone(event) {
+      if (!exitStudyButton) {
+        return false;
+      }
+
+      const rect = exitStudyButton.getBoundingClientRect();
+      const safeLeft = Math.max(0, rect.left - EXIT_STUDY_SAFE_ZONE_PADDING);
+      const safeRight = Math.min(root.innerWidth, rect.right + EXIT_STUDY_SAFE_ZONE_PADDING);
+      const safeTop = Math.max(0, rect.top - EXIT_STUDY_SAFE_ZONE_PADDING);
+      const safeBottom = Math.min(root.innerHeight, rect.bottom + EXIT_STUDY_SAFE_ZONE_PADDING);
+
+      return (
+        event.clientX >= safeLeft &&
+        event.clientX <= safeRight &&
+        event.clientY >= safeTop &&
+        event.clientY <= safeBottom
+      );
+    }
+
+    function resolveActiveStudyEdge(scores) {
+      const candidates = STUDY_EDGE_KEYS.filter((edge) => scores[edge] > STUDY_EDGE_THRESHOLD);
+
+      if (candidates.length === 0) {
+        return null;
+      }
+
+      if (candidates.length === 1) {
+        return candidates[0];
+      }
+
+      const previousScores = lastPointerScores || {};
+      let growthEdge = null;
+      let bestGrowth = STUDY_EDGE_DELTA_EPSILON;
+
+      candidates.forEach((edge) => {
+        const growth = scores[edge] - (previousScores[edge] || 0);
+        if (growth > bestGrowth) {
+          bestGrowth = growth;
+          growthEdge = edge;
+        }
+      });
+
+      if (growthEdge) {
+        return growthEdge;
+      }
+
+      if (activeStudyEdge && candidates.includes(activeStudyEdge)) {
+        return activeStudyEdge;
+      }
+
+      return candidates.reduce((bestEdge, edge) => {
+        return scores[edge] > scores[bestEdge] ? edge : bestEdge;
+      }, candidates[0]);
+    }
+
+    function setActiveStudyEdge(edge, scores = {}) {
+      activeStudyEdge = edge;
+
+      STUDY_EDGE_KEYS.forEach((key) => {
+        const isActive = key === edge;
+        const score = isActive ? scores[key] || 0 : 0;
+        const config = STUDY_EDGE_CONFIG[key];
+        const label = document.getElementById(config.labelId);
+
+        wrap.style.setProperty(config.glowVar, score.toFixed(3));
+        if (label) {
+          label.classList.toggle("visible", isActive && score > STUDY_EDGE_THRESHOLD);
+        }
+      });
+    }
+
+    function performStudyEdgeAction(edge) {
+      STUDY_EDGE_CONFIG[edge]?.action();
+    }
+
+    function resolveClickStudyEdge(defaultEdge, event) {
+      if (event.detail <= 0) {
+        return defaultEdge;
+      }
+
+      const scores = getPointerEdgeScores(event);
+      const candidates = STUDY_EDGE_KEYS.filter((edge) => scores[edge] > STUDY_EDGE_THRESHOLD);
+      if (candidates.includes(defaultEdge)) {
+        return defaultEdge;
+      }
+
+      return candidates.reduce((bestEdge, edge) => {
+        return scores[edge] > scores[bestEdge] ? edge : bestEdge;
+      }, candidates[0] || defaultEdge);
+    }
+
+    function handleStudyEdgeClick(defaultEdge, event) {
+      if (event.detail > 0 && isPointerInExitStudySafeZone(event)) {
+        resetGlow();
+        return;
+      }
+
+      const edge = resolveClickStudyEdge(defaultEdge, event);
+      performStudyEdgeAction(edge);
     }
 
     function getCurrentSide() {
@@ -41,12 +201,34 @@
       return ctx.state.study.flipped ? card.backText : card.frontText;
     }
 
+    function normalizeStudyImageUrl(value) {
+      return Karto.normalizeImageSource?.(value) || "";
+    }
+
+    function getStudyImageSources(card) {
+      if (!card?.hasImage && !card?.image && !card?.imageStudy && !card?.imageThumb) {
+        return [];
+      }
+
+      return [
+        normalizeStudyImageUrl(card.imageThumb),
+        normalizeStudyImageUrl(card.imageStudy),
+        normalizeStudyImageUrl(Karto.deriveStudyImageUrl?.(card.image)),
+        normalizeStudyImageUrl(card.image)
+      ].filter((url, index, urls) => url && urls.indexOf(url) === index);
+    }
+
+    function getStudyImageSource(card) {
+      return getStudyImageSources(card)[0] || "";
+    }
+
     function getCurrentImage(card, currentSide) {
-      if (!card?.image) {
+      const imageUrl = getStudyImageSource(card);
+      if (!imageUrl) {
         return null;
       }
 
-      return (card.imageSide || "back") === currentSide ? card.image : null;
+      return (card.imageSide || "back") === currentSide ? imageUrl : null;
     }
 
     function isLongStudyText(text) {
@@ -57,7 +239,7 @@
 
     function renderIfCurrentImage(url) {
       const currentCard = getCurrentStudyCard(ctx.state.study);
-      if (!currentCard || currentCard.image !== url || !ctx.router.isVisible("studyScreen")) {
+      if (!currentCard || getCurrentImage(currentCard, getCurrentSide()) !== url || !ctx.router.isVisible("studyScreen")) {
         return;
       }
 
@@ -113,50 +295,66 @@
       return entry;
     }
 
-    function getWarmImageUrls(limitAhead = WARM_AHEAD_COUNT) {
-      const queue = Array.isArray(ctx.state.study.queue) ? ctx.state.study.queue : [];
-      if (queue.length === 0) {
-        return [];
+    function mergeStudyCardMedia(cards) {
+      const cardsById = new Map((Array.isArray(cards) ? cards : []).map((card) => [card.id, card]));
+      if (cardsById.size === 0) {
+        return;
       }
 
-      const urls = [];
-      const seenUrls = new Set();
-      const targetCount = limitAhead + 1;
-
-      for (let offset = 0; offset < queue.length && urls.length < targetCount; offset += 1) {
-        const index = (ctx.state.study.currentIndex + offset) % queue.length;
-        const card = queue[index];
-        const url = typeof card?.image === "string" ? card.image.trim() : "";
-        if (!url || seenUrls.has(url)) {
-          continue;
-        }
-
-        seenUrls.add(url);
-        urls.push(url);
-      }
-
-      return urls;
-    }
-
-    function warmUpcomingImages() {
-      getWarmImageUrls().forEach((url) => {
-        ensureImageMeta(url);
+      ["allCards", "queue"].forEach((key) => {
+        ctx.state.study[key] = (ctx.state.study[key] || []).map((card) => {
+          const mediaCard = cardsById.get(card.id);
+          return mediaCard
+            ? {
+              ...card,
+              image: mediaCard.image,
+              imageThumb: mediaCard.imageThumb || card.imageThumb || "",
+              imageStudy: mediaCard.imageStudy || card.imageStudy || "",
+              imageSide: mediaCard.imageSide,
+              hasImage: mediaCard.hasImage,
+              mediaLoaded: true
+            }
+            : card;
+        });
       });
     }
 
-    function isWaitingForCurrentImage() {
-      const currentCard = getCurrentStudyCard(ctx.state.study);
-      if (!currentCard) {
-        return false;
+    function getUpcomingStudyCards(limit = STUDY_PRELOAD_WINDOW) {
+      const queue = Array.isArray(ctx.state.study.queue) ? ctx.state.study.queue : [];
+      if (!queue.length) {
+        return [];
       }
 
-      const imageUrl = getCurrentImage(currentCard, getCurrentSide());
-      if (!imageUrl) {
-        return false;
+      return queue.slice(ctx.state.study.currentIndex, ctx.state.study.currentIndex + limit);
+    }
+
+    function needsStudyMedia(card) {
+      return !!card?.hasImage && card.mediaLoaded === false && !getStudyImageSource(card);
+    }
+
+    async function loadStudyMedia(cards) {
+      const cardIds = (Array.isArray(cards) ? cards : [])
+        .filter(needsStudyMedia)
+        .map((card) => card.id);
+
+      if (!cardIds.length) {
+        return;
       }
 
-      const meta = ensureImageMeta(imageUrl);
-      return meta?.status === "loading";
+      mergeStudyCardMedia(await ctx.store.loadCardMedia?.(cardIds));
+    }
+
+    function warmUpcomingCards() {
+      const upcomingCards = getUpcomingStudyCards(STUDY_PRELOAD_WINDOW);
+      void (async () => {
+        await loadStudyMedia(upcomingCards);
+        upcomingCards
+          .map(getStudyImageSource)
+          .filter(Boolean)
+          .forEach((url) => {
+            ensureImageMeta(url);
+          });
+      })();
     }
 
     function resolveMediaLayout(currentSide, text, imageUrl) {
@@ -212,39 +410,17 @@
         return;
       }
 
-      warmUpcomingImages();
-
       const text = getCurrentText(card);
       const imageUrl = getCurrentImage(card, currentSide);
       const imageMeta = imageUrl ? ensureImageMeta(imageUrl) : null;
-      const isWaitingForImage = !!imageUrl && imageMeta?.status === "loading";
-      const layout = resolveMediaLayout(currentSide, text, imageUrl);
+      const visibleImageUrl = imageMeta?.status === "error" ? null : imageUrl;
+      const layout = resolveMediaLayout(currentSide, text, visibleImageUrl);
 
       clearElement(cardElement);
       cardElement.classList.toggle("is-flipped", ctx.state.study.flipped);
-      cardElement.classList.toggle("has-media", !!imageUrl);
+      cardElement.classList.toggle("has-media", !!visibleImageUrl);
       cardElement.classList.toggle("is-layout-top", layout === "top");
       cardElement.classList.toggle("is-layout-side", layout === "side");
-
-      if (isWaitingForImage) {
-        cardElement.classList.add("is-loading-media", "is-layout-top");
-        cardElement.setAttribute("aria-busy", "true");
-        cardElement.appendChild(createElement("div", {
-          className: "study-card-loading",
-          children: [
-            createElement("div", {
-              className: "study-card-loading-spinner",
-              attrs: { "aria-hidden": "true" }
-            }),
-            createElement("div", {
-              className: "study-card-loading-text",
-              text: t("common.loading")
-            })
-          ]
-        }));
-        resetLabels();
-        return;
-      }
 
       const content = createElement("div", {
         className:
@@ -253,14 +429,14 @@
           "study-card-content is-text-only"
       });
 
-      if (imageUrl) {
+      if (visibleImageUrl) {
         content.appendChild(createElement("div", {
           className: "study-card-media",
           children: [
             createElement("img", {
               className: "study-card-img",
               attrs: {
-                src: imageUrl,
+                src: visibleImageUrl,
                 alt: card.frontText || text || "Study image",
                 decoding: "async"
               }
@@ -273,7 +449,7 @@
         className: "study-card-copy",
         children: [
           createElement("div", {
-            className: `${ctx.state.study.flipped ? "study-back-text" : "study-front-text"}${imageUrl ? " has-media" : ""}`,
+            className: `${ctx.state.study.flipped ? "study-back-text" : "study-front-text"}${visibleImageUrl ? " has-media" : ""}`,
             text
           })
         ]
@@ -284,16 +460,53 @@
       resetLabels();
     }
 
-    function start(deckId) {
+    function showCurrentCardWhenReady() {
+      const token = prepareToken + 1;
+      prepareToken = token;
+
+      render();
+      resetGlow();
+      cardElement.focus();
+
+      void (async () => {
+        await loadStudyMedia(getUpcomingStudyCards(STUDY_PRELOAD_WINDOW));
+        if (prepareToken !== token || !ctx.router.isVisible("studyScreen")) {
+          return;
+        }
+
+        const card = getCurrentStudyCard(ctx.state.study);
+        if (card) {
+          ensureImageMeta(getCurrentImage(card, getCurrentSide()));
+        }
+
+        render();
+        warmUpcomingCards();
+      })().catch((error) => {
+        console.error("[karto] Failed to prepare study media:", error);
+
+        if (prepareToken === token && ctx.router.isVisible("studyScreen")) {
+          render();
+        }
+      });
+    }
+
+    async function start(deckId) {
+      const shellDeck = ctx.getDeckById(deckId);
+      const preferredCardIds = (Array.isArray(shellDeck?.cards) ? shellDeck.cards : [])
+        .map((card) => (typeof card?.id === "string" ? card.id : ""))
+        .filter(Boolean);
+
+      await ctx.store.ensureDeckHydrated?.(deckId);
       const deck = ctx.getDeckById(deckId);
-      if (!deck || deck.cards.length === 0) {
+      if (!deck || ctx.getDeckCardCount(deck) === 0 || deck.cards.length === 0) {
         ctx.toast.error(t("alerts.emptyDeckStudy"));
         return;
       }
 
       ctx.state.studyMode = "all";
       ctx.state.study = createStudyState({ cards: deck.cards }, Math.random, {
-        completedRounds: ctx.store.getCompletedRoundsForDeck(deckId)
+        completedRounds: ctx.store.getCompletedRoundsForDeck(deckId),
+        preferredCardIds
       });
       ctx.state.study.mode = "all";
       ctx.state.study.session = {
@@ -306,11 +519,20 @@
         unsure: 0
       };
 
-      warmUpcomingImages();
       ctx.router.goTo("studyScreen", null);
-      render();
-      resetGlow();
-      cardElement.focus();
+      await showCurrentCardWhenReady();
+    }
+
+    function getProgressSnapshot(cardId) {
+      return typeof ctx.store.getStudyProgressEntry === "function"
+        ? ctx.store.getStudyProgressEntry(cardId)
+        : null;
+    }
+
+    function restoreProgressSnapshot(cardId, entry) {
+      if (typeof ctx.store.restoreStudyProgressEntry === "function") {
+        ctx.store.restoreStudyProgressEntry(cardId, entry);
+      }
     }
 
     function recordAnswer(cardId, result) {
@@ -319,80 +541,103 @@
       ctx.store.recordStudyAnswer(cardId, result);
     }
 
+    function undoSessionAnswer(result) {
+      if (!ctx.state.study.session) {
+        return;
+      }
+
+      ctx.state.study.session.reviewed = Math.max(0, ctx.state.study.session.reviewed - 1);
+      if (["wrong", "unsure", "correct"].includes(result)) {
+        ctx.state.study.session[result] = Math.max(0, ctx.state.study.session[result] - 1);
+      }
+    }
+
     function finalizeAnswer(result) {
       const card = getCurrentStudyCard(ctx.state.study);
       if (!card) return;
 
+      const previousProgressEntry = getProgressSnapshot(card.id);
       recordAnswer(card.id, result);
-      advanceStudy(ctx.state.study, result);
-      if (isWaitingForCurrentImage()) {
-        render();
-        return;
-      }
-      render();
-      resetGlow();
+      advanceStudy(ctx.state.study, result, Math.random, { previousProgressEntry });
+      clearCurrentBackShown();
+      ctx.state.study.flipped = false;
+      void showCurrentCardWhenReady();
     }
 
     function finalizePendingAnswer() {
       const card = getCurrentStudyCard(ctx.state.study);
-      const committedAnswer = commitPendingStudyAnswer(ctx.state.study);
-      if (!card || !committedAnswer) {
+      if (!card) {
+        return false;
+      }
+
+      const previousProgressEntry = getProgressSnapshot(card.id);
+      const committedAnswer = commitPendingStudyAnswer(ctx.state.study, Math.random, { previousProgressEntry });
+      if (!committedAnswer) {
         return false;
       }
 
       recordAnswer(card.id, committedAnswer.result);
-      render();
-      resetGlow();
+      clearCurrentBackShown();
+      ctx.state.study.flipped = false;
+      void showCurrentCardWhenReady();
       return true;
     }
 
     function answer(result) {
-      if (!getCurrentStudyCard(ctx.state.study) || isWaitingForCurrentImage()) {
+      if (!getCurrentStudyCard(ctx.state.study)) {
         return;
       }
 
-      if (hasPendingAnswer()) {
+      if (ctx.state.study.flipped) {
         finalizeAnswer(result);
         return;
       }
 
-      if (result === "correct" || ctx.state.study.flipped) {
+      if (result === "correct") {
         finalizeAnswer(result);
         return;
       }
 
-      if (queuePendingStudyAnswer(ctx.state.study, result)) {
-        render();
-        resetGlow();
+      if (hasCurrentBackBeenShown()) {
+        finalizeAnswer(result);
+        return;
       }
-    }
-
-    function handleCardAction() {
-      if (!ctx.state.study.queue.length || isWaitingForCurrentImage()) return;
 
       if (hasPendingAnswer()) {
         finalizePendingAnswer();
         return;
       }
 
-      ctx.state.study.flipped = !ctx.state.study.flipped;
-      render();
-      resetGlow();
-    }
-
-    function goBack() {
-      if (!ctx.state.study.queue.length || isWaitingForCurrentImage()) return;
-
-      if (cancelPendingStudyAnswer(ctx.state.study)) {
+      if (queuePendingStudyAnswer(ctx.state.study, result)) {
+        markCurrentBackShown();
         render();
         resetGlow();
+      }
+    }
+
+    function handleCardAction() {
+      if (!ctx.state.study.queue.length) return;
+
+      if (ctx.state.study.flipped && hasPendingAnswer()) {
+        finalizePendingAnswer();
         return;
       }
 
-      if (ctx.state.study.flipped) {
-        ctx.state.study.flipped = false;
-        render();
-        resetGlow();
+      const shouldShowBack = !ctx.state.study.flipped;
+      ctx.state.study.flipped = shouldShowBack;
+      if (shouldShowBack) {
+        markCurrentBackShown();
+      }
+      void showCurrentCardWhenReady();
+    }
+
+    function goBack() {
+      const undoneAnswer = undoStudyAnswer(ctx.state.study);
+      if (undoneAnswer) {
+        restoreProgressSnapshot(undoneAnswer.cardId, undoneAnswer.previousProgressEntry);
+        undoSessionAnswer(undoneAnswer.result);
+        clearCurrentBackShown();
+        void showCurrentCardWhenReady();
         return;
       }
 
@@ -400,6 +645,7 @@
     }
 
     function exitStudy() {
+      prepareToken += 1;
       finishSession();
       ctx.settingsView.render();
       ctx.router.goTo("homeScreen", "homeScreen");
@@ -408,39 +654,32 @@
 
     cardElement.addEventListener("click", handleCardAction);
 
-    document.getElementById("wrongZone").addEventListener("click", () => {
-      answer("wrong");
+    document.getElementById("wrongZone").addEventListener("click", (event) => {
+      handleStudyEdgeClick("left", event);
     });
-    document.getElementById("correctZone").addEventListener("click", () => {
-      answer("correct");
+    document.getElementById("correctZone").addEventListener("click", (event) => {
+      handleStudyEdgeClick("right", event);
     });
-    document.getElementById("unsureZone").addEventListener("click", () => {
-      answer("unsure");
+    document.getElementById("unsureZone").addEventListener("click", (event) => {
+      handleStudyEdgeClick("bottom", event);
     });
-    document.getElementById("backZone").addEventListener("click", goBack);
-    document.getElementById("exitStudyBtn").addEventListener("click", exitStudy);
+    document.getElementById("backZone").addEventListener("click", (event) => {
+      handleStudyEdgeClick("top", event);
+    });
+    exitStudyButton?.addEventListener("click", exitStudy);
 
     root.addEventListener("mousemove", (event) => {
       if (!ctx.router.isVisible("studyScreen")) return;
 
-      const width = root.innerWidth;
-      const height = root.innerHeight;
-      const edge = 200;
+      if (isPointerInExitStudySafeZone(event)) {
+        resetGlow();
+        return;
+      }
 
-      const left = (1 - clamp(event.clientX / edge, 0, 1)) * 1;
-      const right = (1 - clamp((width - event.clientX) / edge, 0, 1)) * 1;
-      const bottom = (1 - clamp((height - event.clientY) / edge, 0, 1)) * 1;
-      const top = (1 - clamp(event.clientY / edge, 0, 1)) * 1;
-
-      wrap.style.setProperty("--left-glow", left.toFixed(3));
-      wrap.style.setProperty("--right-glow", right.toFixed(3));
-      wrap.style.setProperty("--bottom-glow", bottom.toFixed(3));
-      wrap.style.setProperty("--top-glow", top.toFixed(3));
-
-      document.getElementById("wrongLabel").classList.toggle("visible", left > 0.2);
-      document.getElementById("correctLabel").classList.toggle("visible", right > 0.2);
-      document.getElementById("unsureLabel").classList.toggle("visible", bottom > 0.2);
-      document.getElementById("backLabel").classList.toggle("visible", top > 0.2);
+      const scores = getPointerEdgeScores(event);
+      const edge = resolveActiveStudyEdge(scores);
+      setActiveStudyEdge(edge, scores);
+      lastPointerScores = scores;
     });
 
     root.addEventListener("resize", () => {

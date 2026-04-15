@@ -119,7 +119,7 @@
           createDeckNameControl(deck),
           createElement("div", {
             className: "lib-deck-row-count",
-            text: ctx.cardCount(deck.cards.length)
+            text: ctx.cardCount(ctx.getDeckCardCount(deck))
           }),
           createElement("div", {
             className: "lib-deck-row-actions",
@@ -231,7 +231,7 @@
               }
             }),
             createElement("span", {
-              text: `${deck.name} (${ctx.cardCount(deck.cards.length)})`
+              text: `${deck.name} (${ctx.cardCount(ctx.getDeckCardCount(deck))})`
             })
           ]
         });
@@ -251,7 +251,7 @@
       ctx.router.goTo("mergeDecksScreen", "libraryScreen");
     }
 
-    function confirmMerge() {
+    async function confirmMerge() {
       const selectedDeckIds = Array.from(
         mergeList.querySelectorAll("input:checked")
       ).map((checkbox) => checkbox.value);
@@ -265,6 +265,10 @@
       if (!name) {
         ctx.toast.error(t("alerts.enterName"));
         return;
+      }
+
+      for (const deckId of selectedDeckIds) {
+        await ctx.store.ensureDeckHydrated?.(deckId, { includeMedia: true });
       }
 
       const sourceDecks = selectedDeckIds
@@ -311,7 +315,8 @@
     });
 
     document.getElementById("libraryImportBtn").addEventListener("click", () => {
-      ctx.importJson((rawPayload) => {
+      ctx.importJson(async (rawPayload) => {
+        await ctx.store.ensureAllDecksHydrated?.({ includeMedia: true });
         const result = prepareLibraryImport(rawPayload, ctx.state.decks);
         if (!result.isValid) {
           ctx.toast.error(t("alerts.invalidFormat"));

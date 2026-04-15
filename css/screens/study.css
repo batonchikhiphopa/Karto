@@ -1,0 +1,298 @@
+.screen-study {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.study-wrap {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  overflow: hidden;
+  --left-glow: 0;
+  --right-glow: 0;
+  --bottom-glow: 0;
+  --top-glow: 0;
+}
+
+.study-exit-btn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 8;
+}
+
+.study-edge {
+  position: absolute;
+  border: none;
+  background: transparent;
+  padding: 0;
+  z-index: 7;
+  cursor: default;
+}
+
+.study-edge-left {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 140px;
+  background: radial-gradient(ellipse at left center, rgba(255, 55, 55, calc(var(--left-glow) * 0.72)) 0%, transparent 68%);
+}
+
+.study-edge-right {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 140px;
+  background: radial-gradient(ellipse at right center, rgba(55, 220, 100, calc(var(--right-glow) * 0.72)) 0%, transparent 68%);
+}
+
+.study-edge-bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 140px;
+  background: radial-gradient(ellipse at center bottom, rgba(255, 200, 50, calc(var(--bottom-glow) * 0.7)) 0%, transparent 70%);
+}
+
+.study-edge-top {
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 110px;
+  background: radial-gradient(ellipse at center top, rgba(var(--study-top-glow-color), calc(var(--top-glow) * 0.64)) 0%, transparent 70%);
+}
+
+.study-edge-label {
+  position: absolute;
+  color: #fff;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.study-edge-label.visible {
+  opacity: 1;
+}
+
+.study-edge-left .study-edge-label {
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(255, 110, 110, 0.94);
+}
+
+.study-edge-right .study-edge-label {
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(110, 255, 150, 0.94);
+}
+
+.study-edge-bottom .study-edge-label {
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  color: rgba(255, 210, 80, 0.94);
+}
+
+.study-edge-top .study-edge-label {
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  color: rgba(215, 215, 255, 0.94);
+}
+
+.study-card-area {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 90px 24px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.study-card {
+  width: min(1280px, 92vw);
+  min-height: 0;
+  max-width: 1280px;
+  max-height: calc(100vh - 156px);
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: clamp(8px, 1.4vw, 16px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  text-align: center;
+  pointer-events: auto;
+}
+
+.study-card-loading {
+  width: min(100%, 520px);
+  min-height: min(46vh, 360px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin: 0 auto;
+  border-radius: 28px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  box-shadow: var(--shadow);
+}
+
+.study-card-loading-spinner {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 3px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-top-color: var(--accent);
+  animation: study-card-spinner 0.8s linear infinite;
+}
+
+.study-card-loading-text {
+  color: var(--text-muted);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.study-card-content {
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(100vh - 156px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(20px, 3vw, 42px);
+}
+
+.study-card-content.is-text-only,
+.study-card-content.is-top {
+  flex-direction: column;
+}
+
+.study-card-content.is-side {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.study-card-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 1180px);
+  min-width: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.study-card-copy {
+  width: 100%;
+  min-width: 0;
+  max-width: min(100%, 1120px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.study-card.has-media .study-card-copy {
+  max-width: min(100%, 1120px);
+}
+
+.study-card.is-layout-side .study-card-media {
+  flex: 0 1 48%;
+  width: 48%;
+  max-width: 620px;
+  align-self: center;
+}
+
+.study-card.is-layout-side .study-card-copy {
+  flex: 1 1 52%;
+  max-width: none;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.study-card-tag {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.study-front-text {
+  font-size: clamp(3.3rem, 9vw, 7.4rem);
+  font-weight: 700;
+  line-height: 1.05;
+  max-width: min(22ch, 100%);
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+  text-shadow: 0 14px 34px rgba(2, 6, 12, 0.28);
+  cursor: default;
+  user-select: none;
+}
+
+.study-front-text.has-media {
+  font-size: clamp(2.8rem, 5.8vw, 5.8rem);
+  max-width: min(24ch, 100%);
+}
+
+.study-back-text {
+  font-size: clamp(2.2rem, 4.8vw, 4.2rem);
+  color: var(--text);
+  line-height: 1.2;
+  max-width: min(42ch, 100%);
+  white-space: pre-wrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+  text-shadow: 0 12px 30px rgba(2, 6, 12, 0.24);
+}
+
+.study-back-text.has-media {
+  font-size: clamp(1.8rem, 3vw, 3rem);
+  line-height: 1.18;
+  max-width: min(50ch, 100%);
+}
+
+.study-card.is-layout-side .study-back-text.has-media {
+  font-size: clamp(1.6rem, 2.4vw, 2.7rem);
+  max-width: none;
+}
+
+.study-card-img {
+  display: block;
+  max-width: 100%;
+  max-height: min(66vh, 720px);
+  border-radius: 20px;
+  object-fit: contain;
+  box-shadow: 0 20px 46px rgba(10, 16, 28, 0.2);
+}
+
+.study-card.is-layout-side .study-card-img {
+  width: 100%;
+  max-width: 100%;
+  max-height: min(72vh, 760px);
+}
+
+@keyframes study-card-spinner {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

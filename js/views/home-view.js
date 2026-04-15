@@ -4,10 +4,15 @@
   function createHomeView(ctx) {
     const grid = document.getElementById("deckGrid");
     const rotationStates = new Map();
+    const tileRecords = new Map();
+    const imagePreloadCache = new Map();
+    const pendingThumbs = new Set();
     const reducedMotionQuery = typeof root.matchMedia === "function"
       ? root.matchMedia("(prefers-reduced-motion: reduce)")
       : null;
+    let createTileNode = null;
     let isActive = false;
+    let reducedMotionMode = prefersReducedMotion();
 
     function prefersReducedMotion() {
       return !!reducedMotionQuery?.matches;
@@ -28,11 +33,99 @@
       return copy;
     }
 
-    function getDeckImages(deck) {
-      const seen = new Set();
+    function normalizeImageSource(value) {
+      return Karto.normalizeImageSource?.(value) || (typeof value === "string" ? value.trim() : "");
+    }
 
-      return deck.cards
-        .map((card) => String(card.image || "").trim())
+    function arraysEqual(left, right) {
+      if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+        return false;
+      }
+
+      return left.every((value, index) => value === right[index]);
+    }
+
+    function createDeckMediaSignature(deck) {
+      const cardPart = (Array.isArray(deck?.cards) ? deck.cards : [])
+        .map((card) => [
+          typeof card?.id === "string" ? card.id : "",
+          normalizeImageSource(card?.image),
+          normalizeImageSource(card?.imageThumb),
+          card?.imageSide === "front" ? "front" : "back"
+        ].join("\u241f"))
+        .join("\u241e");
+
+      return `${typeof deck?.id === "string" ? deck.id : ""}\u241d${cardPart}`;
+    }
+
+    function queueDataImageThumbnail(card, imageUrl) {
+      if (!card || !Karto.isDataImageUrl?.(imageUrl) || typeof Karto.createDataImageThumbnail !== "function") {
+        return;
+      }
+
+      const key = `${card.id || ""}:${imageUrl.slice(0, 80)}`;
+      if (pendingThumbs.has(key)) {
+        return;
+      }
+
+      pendingThumbs.add(key);
+      Karto.createDataImageThumbnail(imageUrl)
+        .then((imageThumb) => {
+          pendingThumbs.delete(key);
+          if (!imageThumb || normalizeImageSource(card.image) !== imageUrl || normalizeImageSource(card.imageThumb)) {
+            return;
+          }
+
+          card.imageThumb = imageThumb;
+          ctx.store.saveDecksSoon();
+          if (isActive) {
+            render();
+          }
+        })
+        .catch(() => {
+          pendingThumbs.delete(key);
+        });
+    }
+
+    function resolveCardTileImage(card) {
+      const storedThumb = normalizeImageSource(card.imageThumb);
+      if (storedThumb) {
+        return { imageUrl: storedThumb, didUpdate: false };
+      }
+
+      const imageUrl = normalizeImageSource(card?.image);
+      if (!imageUrl) {
+        return { imageUrl: "", didUpdate: false };
+      }
+
+      const derivedThumb = Karto.deriveTileImageUrl?.(imageUrl) || "";
+      if (derivedThumb) {
+        card.imageThumb = derivedThumb;
+        return { imageUrl: derivedThumb, didUpdate: true };
+      }
+
+      queueDataImageThumbnail(card, imageUrl);
+      return { imageUrl, didUpdate: false };
+    }
+
+    function buildDeckMedia(deck) {
+      const initialSignature = createDeckMediaSignature(deck);
+      const cachedEntry = ctx.store.getHomeMediaCacheEntry?.(deck.id);
+      if (cachedEntry?.signature === initialSignature) {
+        return {
+          signature: initialSignature,
+          images: cachedEntry.images
+        };
+      }
+
+      const seen = new Set();
+      let didUpdateCards = false;
+      const images = deck.cards
+        .map((card) => {
+          const result = resolveCardTileImage(card);
+          didUpdateCards = didUpdateCards || result.didUpdate;
+          return result.imageUrl;
+        })
         .filter((imageUrl) => {
           if (!imageUrl || seen.has(imageUrl)) {
             return false;
@@ -41,6 +134,26 @@
           seen.add(imageUrl);
           return true;
         });
+      const signature = didUpdateCards ? createDeckMediaSignature(deck) : initialSignature;
+      const nextEntry = {
+        signature,
+        images,
+        updatedAt: new Date().toISOString()
+      };
+      const latestEntry = ctx.store.getHomeMediaCacheEntry?.(deck.id);
+
+      if (!latestEntry || latestEntry.signature !== signature || !arraysEqual(latestEntry.images, images)) {
+        ctx.store.setHomeMediaCacheEntry?.(deck.id, nextEntry);
+      }
+
+      if (didUpdateCards) {
+        ctx.store.saveDecksSoon();
+      }
+
+      return {
+        signature,
+        images
+      };
     }
 
     function buildRotationQueue(images, currentIndex) {
@@ -63,6 +176,7 @@
       const activeImage = state.imageNodes.find((node) => node.classList.contains("is-active")) || state.activeImage;
       state.activeImage = activeImage;
       state.inactiveImage = state.imageNodes.find((node) => node !== activeImage) || state.inactiveImage;
+      state.rotationToken += 1;
 
       state.imageNodes.forEach((imageNode) => {
         if (imageNode === state.activeImage) {
@@ -71,13 +185,21 @@
         }
 
         imageNode.classList.remove("is-active");
-        imageNode.removeAttribute("src");
       });
     }
 
-    function clearRotationStates() {
-      rotationStates.forEach(stopRotation);
-      rotationStates.clear();
+    function stopDeckRotation(deckId) {
+      const state = rotationStates.get(deckId);
+      stopRotation(state);
+      rotationStates.delete(deckId);
+    }
+
+    function resetRenderedTiles() {
+      tileRecords.forEach((record, deckId) => {
+        stopDeckRotation(deckId);
+        record.tile.remove();
+      });
+      tileRecords.clear();
     }
 
     function scheduleRotation(state) {
@@ -91,7 +213,47 @@
       }, 4500 + Math.floor(root.Math.random() * 2501));
     }
 
-    function rotateToNextImage(state) {
+    function preloadTileImage(url) {
+      const imageUrl = normalizeImageSource(url);
+      if (!imageUrl) {
+        return Promise.reject(new Error("Image source is empty."));
+      }
+
+      const cached = imagePreloadCache.get(imageUrl);
+      if (cached?.status === "loaded") {
+        return Promise.resolve(imageUrl);
+      }
+
+      if (cached?.status === "loading") {
+        return cached.promise;
+      }
+
+      if (cached?.status === "error") {
+        return Promise.reject(new Error("Image previously failed to preload."));
+      }
+
+      const promise = (typeof Karto.loadImage === "function"
+        ? Karto.loadImage(imageUrl)
+        : Promise.resolve()
+      ).then(() => {
+        imagePreloadCache.set(imageUrl, {
+          status: "loaded",
+          promise: Promise.resolve(imageUrl)
+        });
+        return imageUrl;
+      }).catch((error) => {
+        imagePreloadCache.set(imageUrl, {
+          status: "error",
+          promise: null
+        });
+        throw error;
+      });
+
+      imagePreloadCache.set(imageUrl, { status: "loading", promise });
+      return promise;
+    }
+
+    function rotateToNextImage(state, attempts = 0) {
       if (!isActive || prefersReducedMotion() || state.images.length < 2) {
         return;
       }
@@ -106,31 +268,62 @@
         return;
       }
 
-      const outgoing = state.activeImage;
-      const incoming = state.inactiveImage;
+      const nextImageUrl = state.images[nextIndex];
+      const rotationToken = state.rotationToken + 1;
+      state.rotationToken = rotationToken;
 
-      incoming.classList.remove("is-active");
-      incoming.src = state.images[nextIndex];
-      incoming.alt = state.alt;
+      preloadTileImage(nextImageUrl)
+        .then(() => {
+          if (!isActive || state.rotationToken !== rotationToken) {
+            return;
+          }
 
-      root.requestAnimationFrame(() => {
-        incoming.classList.add("is-active");
-        outgoing.classList.remove("is-active");
-      });
+          const outgoing = state.activeImage;
+          const incoming = state.inactiveImage;
 
-      state.transitionId = root.setTimeout(() => {
-        state.transitionId = null;
+          incoming.classList.remove("is-active");
+          if (incoming.getAttribute("src") !== nextImageUrl) {
+            incoming.src = nextImageUrl;
+          }
+          incoming.alt = state.alt;
 
-        const previous = state.activeImage;
-        state.activeImage = incoming;
-        state.inactiveImage = previous;
-        state.currentIndex = nextIndex;
+          root.requestAnimationFrame(() => {
+            if (state.rotationToken !== rotationToken) {
+              return;
+            }
 
-        state.inactiveImage.classList.remove("is-active");
-        state.inactiveImage.removeAttribute("src");
+            incoming.classList.add("is-active");
+            outgoing.classList.remove("is-active");
+          });
 
-        scheduleRotation(state);
-      }, 760);
+          state.transitionId = root.setTimeout(() => {
+            state.transitionId = null;
+            if (state.rotationToken !== rotationToken) {
+              return;
+            }
+
+            const previous = state.activeImage;
+            state.activeImage = incoming;
+            state.inactiveImage = previous;
+            state.currentIndex = nextIndex;
+
+            state.inactiveImage.classList.remove("is-active");
+
+            scheduleRotation(state);
+          }, 760);
+        })
+        .catch(() => {
+          if (!isActive || state.rotationToken !== rotationToken) {
+            return;
+          }
+
+          if (attempts < state.images.length - 1) {
+            rotateToNextImage(state, attempts + 1);
+            return;
+          }
+
+          scheduleRotation(state);
+        });
     }
 
     function activate() {
@@ -146,7 +339,8 @@
       rotationStates.forEach(stopRotation);
     }
 
-    function createDeckMediaStage(deck, images) {
+    function createDeckMediaStage(deck, media) {
+      const images = media.images;
       const stage = createElement("div", {
         className: `deck-media-stage${images.length ? "" : " is-empty"}`,
         attrs: { "aria-hidden": "true" }
@@ -162,7 +356,8 @@
         attrs: {
           src: images[startIndex],
           alt: deck.name,
-          loading: "lazy",
+          loading: "eager",
+          fetchpriority: "high",
           decoding: "async"
         }
       });
@@ -192,6 +387,7 @@
         activeImage,
         inactiveImage,
         imageNodes: [activeImage, inactiveImage],
+        rotationToken: 0,
         timeoutId: null,
         transitionId: null
       });
@@ -199,14 +395,42 @@
       return stage;
     }
 
-    function createDeckTile(deck) {
-      const images = getDeckImages(deck);
+    function updateDeckTileContent(tile, deck, media) {
+      tile.classList.toggle("deck-tile-no-image", media.images.length === 0);
+      tile.dataset.deckId = deck.id;
+
+      tile.querySelectorAll("[data-deck-id]").forEach((node) => {
+        node.dataset.deckId = deck.id;
+      });
+
+      const surface = tile.querySelector("[data-action='study']");
+      if (surface) {
+        surface.setAttribute("aria-label", deck.name);
+      }
+
+      const name = tile.querySelector(".deck-tile-name");
+      if (name) {
+        name.textContent = deck.name;
+      }
+
+      const count = tile.querySelector(".deck-tile-count");
+      if (count) {
+        count.textContent = ctx.cardCount(ctx.getDeckCardCount(deck));
+      }
+
+      const rotationState = rotationStates.get(deck.id);
+      if (rotationState) {
+        rotationState.alt = deck.name;
+      }
+    }
+
+    function createDeckTile(deck, media) {
       const tile = createElement("div", {
-        className: `deck-tile${images.length ? "" : " deck-tile-no-image"}`,
+        className: `deck-tile${media.images.length ? "" : " deck-tile-no-image"}`,
         dataset: { deckId: deck.id }
       });
 
-      tile.appendChild(createDeckMediaStage(deck, images));
+      tile.appendChild(createDeckMediaStage(deck, media));
 
       tile.appendChild(createElement("div", {
         className: "deck-overlay",
@@ -228,7 +452,7 @@
         createElement("div", { className: "deck-tile-name", text: deck.name }),
         createElement("div", {
           className: "deck-tile-count",
-          text: ctx.cardCount(deck.cards.length)
+          text: ctx.cardCount(ctx.getDeckCardCount(deck))
         })
       );
 
@@ -311,16 +535,63 @@
       grid.dataset.columns = ctx.state.homeGridColumns || "auto";
     }
 
+    function renderDeckTile(deck, media) {
+      const existingRecord = tileRecords.get(deck.id);
+      if (existingRecord?.mediaSignature === media.signature) {
+        updateDeckTileContent(existingRecord.tile, deck, media);
+        grid.appendChild(existingRecord.tile);
+        return;
+      }
+
+      stopDeckRotation(deck.id);
+
+      const tile = createDeckTile(deck, media);
+      const nextRecord = {
+        tile,
+        mediaSignature: media.signature
+      };
+
+      if (existingRecord?.tile.isConnected) {
+        existingRecord.tile.replaceWith(tile);
+      } else {
+        grid.appendChild(tile);
+      }
+
+      tileRecords.set(deck.id, nextRecord);
+    }
+
     function render() {
-      clearRotationStates();
-      clearElement(grid);
       applyGridPreference();
 
+      if (prefersReducedMotion() !== reducedMotionMode) {
+        reducedMotionMode = prefersReducedMotion();
+        resetRenderedTiles();
+      }
+
+      const validDeckIds = new Set();
+
       ctx.state.decks.forEach((deck) => {
-        grid.appendChild(createDeckTile(deck));
+        validDeckIds.add(deck.id);
+        renderDeckTile(deck, buildDeckMedia(deck));
       });
 
-      grid.appendChild(createCreateDeckTile());
+      tileRecords.forEach((record, deckId) => {
+        if (validDeckIds.has(deckId)) {
+          return;
+        }
+
+        stopDeckRotation(deckId);
+        record.tile.remove();
+        tileRecords.delete(deckId);
+      });
+
+      ctx.store.pruneHomeMediaCache?.(validDeckIds);
+
+      if (!createTileNode) {
+        createTileNode = createCreateDeckTile();
+      }
+
+      grid.appendChild(createTileNode);
 
       if (isActive) {
         activate();

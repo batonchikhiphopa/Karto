@@ -12,7 +12,12 @@ const {
 function testExportImportRoundTripKeepsData() {
   const deckA = createDeck("Animals");
   deckA.cards.push(
-    createCard({ frontText: "cat", backText: "Katze", image: "https://example.com/cat.jpg" }),
+    createCard({
+      frontText: "cat",
+      backText: "Katze",
+      image: "https://example.com/cat.jpg",
+      imageThumb: "https://example.com/cat-thumb.jpg"
+    }),
     createCard({ frontText: "dog", backText: "Hund", image: "" })
   );
 
@@ -54,7 +59,22 @@ function testMergeDecksDeduplicatesCardsByFingerprint() {
   );
 }
 
+function testExportDoesNotIncludeHomeMediaCache() {
+  const deck = createDeck("Cached");
+  deck.homeMediaCache = {
+    signature: "sig",
+    images: ["https://example.com/thumb.jpg"],
+    updatedAt: "2026-04-15T10:00:00.000Z"
+  };
+  deck.cards.push(createCard({ frontText: "cat", backText: "Katze", image: "" }));
+
+  const payload = createExportPayload([deck]);
+
+  assert.equal(Object.hasOwn(payload.decks[0], "homeMediaCache"), false);
+}
+
 testExportImportRoundTripKeepsData();
 testMergeDecksDeduplicatesCardsByFingerprint();
+testExportDoesNotIncludeHomeMediaCache();
 
 console.log("export/import tests passed");

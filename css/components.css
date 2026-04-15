@@ -1,0 +1,344 @@
+.lib-deck-list,
+.card-list,
+.source-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Lists and Rows Improvements */
+.lib-deck-row,
+.card-row,
+.settings-panel,
+.merge-checkbox-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.lib-deck-row:hover,
+.card-row:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+  border-color: var(--border-strong);
+}
+
+.lib-deck-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+}
+
+.lib-deck-row-name-btn {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.lib-deck-row-name-btn:hover,
+.lib-deck-row-name-btn:focus-visible {
+  color: var(--accent);
+}
+
+.editdeck-title-btn {
+  max-width: 100%;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.editdeck-title-btn:hover,
+.editdeck-title-btn:focus-visible {
+  color: var(--accent);
+}
+
+.editdeck-title-input {
+  width: min(280px, 100%);
+  font: inherit;
+  font-weight: 700;
+  padding-block: 8px;
+}
+
+.lib-deck-row-name-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  padding-block: 10px;
+}
+
+.lib-deck-row-count {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.lib-deck-row-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.lib-empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-muted);
+  border: 2px dashed var(--border);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface-2) 50%, transparent);
+}
+
+.card-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 20px;
+}
+
+.card-row.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-bg) 40%, var(--surface));
+}
+
+.card-row-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-row-checkbox {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.card-row-thumb,
+.card-row-thumb-placeholder {
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: var(--surface-3);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.card-row-thumb-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 1.5rem;
+}
+
+.card-row-texts {
+  min-width: 0;
+}
+
+.card-row-front {
+  font-size: 1.05rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-row-back {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.card-row-inline-move {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.card-row-move-select {
+  width: min(100%, 280px);
+}
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ui-icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.tile-action .ui-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-btn-accent {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.icon-btn-danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+.icon-btn:hover,
+.icon-btn:focus-visible {
+  transform: translateY(-2px);
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+}
+
+.icon-btn:active {
+  transform: translateY(0) scale(0.95);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.icon-btn-accent:hover,
+.icon-btn-accent:focus-visible {
+  background: var(--accent-bg-2);
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
+
+.icon-btn-danger:hover,
+.icon-btn-danger:focus-visible {
+  background: var(--danger-bg-2);
+  border-color: var(--danger);
+}
+
+.library-import-btn {
+  flex-shrink: 0;
+}
+
+.lib-btn {
+  padding: 12px 20px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.lib-btn:hover,
+.lib-btn:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0,0,0,0.1);
+  border-color: var(--border-strong);
+}
+
+.lib-btn:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.lib-btn-green {
+  background: var(--accent);
+  color: var(--surface);
+  border-color: var(--accent);
+}
+
+.lib-btn-green:hover,
+.lib-btn-green:focus-visible {
+  background: var(--accent-strong);
+  color: var(--surface);
+}
+
+.lib-btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+
+.lib-btn-danger:hover,
+.lib-btn-danger:focus-visible {
+  background: #a32b2b;
+}
+
+.lib-btn:disabled,
+.sidebar-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.back-btn {
+  align-self: flex-start;
+  border: none;
+  padding: 8px 12px;
+  margin-left: -12px;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.back-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  transform: translateX(-4px);
+}
+
+.panel-close-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}

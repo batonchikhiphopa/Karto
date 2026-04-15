@@ -14,6 +14,8 @@ function callSync(channel, ...args) {
 
 contextBridge.exposeInMainWorld("kartoDesktop", {
   isDesktop: true,
+  isE2E: process.env.KARTO_E2E === "1",
+  startupPrewarmDelayMs: process.env.KARTO_E2E_STARTUP_PREWARM_DELAY_MS || "",
   getWindowPreferences() {
     return ipcRenderer.invoke("karto-desktop:get-window-preferences");
   },
@@ -32,6 +34,15 @@ contextBridge.exposeInMainWorld("api", {
   loadAppDataSync() {
     return callSync("karto-data:load-app-data-sync");
   },
+  loadAppShellData() {
+    return ipcRenderer.invoke("karto-data:load-app-shell-data");
+  },
+  loadDeckCards(deckId, options) {
+    return ipcRenderer.invoke("karto-data:load-deck-cards", deckId, options);
+  },
+  loadCardMedia(cardIds) {
+    return ipcRenderer.invoke("karto-data:load-card-media", cardIds);
+  },
   saveDecksSnapshotSync(payload) {
     return callSync("karto-data:save-decks-snapshot-sync", payload);
   },
@@ -49,8 +60,5 @@ contextBridge.exposeInMainWorld("api", {
   },
   restoreAppStateSnapshotSync(snapshot) {
     return callSync("karto-data:restore-app-state-snapshot-sync", snapshot);
-  },
-  importLegacyLocalStorageSync(payload) {
-    return callSync("karto-data:import-legacy-localstorage-sync", payload);
   }
 });

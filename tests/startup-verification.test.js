@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 
 const {
   MAX_LOG_PREVIEW_LENGTH,
+  STARTUP_VERIFY_TIMEOUT_MS,
   detectRawBootstrap,
   escapePreviewForLog,
   evaluateVerificationResult,
@@ -9,6 +10,10 @@ const {
   makePreview,
   normalizeBodyText
 } = require("../js/startup-verification.js");
+
+function testStartupTimeoutAllowsColdDesktopLaunch() {
+  assert.equal(STARTUP_VERIFY_TIMEOUT_MS >= 10000, true);
+}
 
 function testNormalizeBodyText() {
   assert.equal(
@@ -18,10 +23,6 @@ function testNormalizeBodyText() {
 }
 
 function testDetectRawBootstrapSignatures() {
-  assert.equal(
-    detectRawBootstrap("document.documentElement.dataset.theme = localStorage.getItem(\"karto.theme\") || \"system\""),
-    true
-  );
   assert.equal(detectRawBootstrap("Karto (function() { try { boot(); } })();"), true);
   assert.equal(detectRawBootstrap("Karto finished loading normally."), false);
 }
@@ -111,6 +112,7 @@ function testFailedAttemptLogFormat() {
   assert.equal(logLine.includes("raw_bootstrap=1"), true);
 }
 
+testStartupTimeoutAllowsColdDesktopLaunch();
 testNormalizeBodyText();
 testDetectRawBootstrapSignatures();
 testHealthyEvaluation();

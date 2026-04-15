@@ -32,6 +32,11 @@
     return value === "front" ? "front" : "back";
   }
 
+  function normalizeCardCount(value, fallback) {
+    const count = Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : null;
+    return count === null ? Math.max(0, Number(fallback) || 0) : count;
+  }
+
   function hasStableId(value) {
     return typeof value === "string" && value.trim().length > 0;
   }
@@ -53,6 +58,9 @@
     const frontText = normalizeText(rawCard.frontText);
     const backText = normalizeText(rawCard.backText);
     const image = normalizeText(rawCard.image);
+    const imageThumb = normalizeText(rawCard.imageThumb);
+    const imageStudy = normalizeText(rawCard.imageStudy);
+    const hasImage = rawCard.hasImage === true || !!image || !!imageThumb || !!imageStudy;
     const imageSide = normalizeImageSide(rawCard.imageSide);
 
     if (!frontText || !backText) {
@@ -64,7 +72,11 @@
       frontText,
       backText,
       image,
-      imageSide
+      imageThumb: hasImage ? imageThumb : "",
+      imageStudy: hasImage ? imageStudy : "",
+      imageSide,
+      hasImage,
+      mediaLoaded: rawCard.mediaLoaded === false ? false : true
     };
   }
 
@@ -121,11 +133,15 @@
     if (!name) return null;
 
     const cards = dedupeCards((rawDeck.cards || []).map(normalizeCard).filter(Boolean));
+    const hasExplicitCardCount = Object.prototype.hasOwnProperty.call(rawDeck, "cardCount");
+    const cardCount = normalizeCardCount(rawDeck.cardCount, cards.length);
 
     return {
       id: hasStableId(rawDeck.id) ? rawDeck.id.trim() : createId("deck"),
       name,
-      cards
+      cards,
+      cardCount: Math.max(cardCount, cards.length),
+      cardsHydrated: rawDeck.cardsHydrated === true || !hasExplicitCardCount
     };
   }
 
@@ -155,6 +171,34 @@
     return result;
   }
 
+  function dedupeDecksForStorage(decks) {
+    const seenIds = new Set();
+    const seenFullFingerprints = new Set();
+    const result = [];
+
+    decks.forEach((deck) => {
+      if (!deck) return;
+
+      if (seenIds.has(deck.id)) {
+        return;
+      }
+
+      if (deck.cardsHydrated === true) {
+        const fingerprint = deckFingerprint(deck);
+        if (seenFullFingerprints.has(fingerprint)) {
+          return;
+        }
+
+        seenFullFingerprints.add(fingerprint);
+      }
+
+      seenIds.add(deck.id);
+      result.push(deck);
+    });
+
+    return result;
+  }
+
   function dedupeDecksByFingerprint(decks) {
     const seenFingerprints = new Set();
     const result = [];
@@ -178,26 +222,45 @@
     const normalized = normalizeCard(card);
     if (!normalized) return null;
 
-    return {
+    const clonedCard = {
       id: options.freshId ? createId("card") : normalized.id,
       frontText: normalized.frontText,
       backText: normalized.backText,
       image: normalized.image,
+      imageThumb: normalized.imageThumb,
+      imageStudy: normalized.imageStudy,
       imageSide: normalized.imageSide
     };
+
+    if (options.includeRuntimeMetadata) {
+      clonedCard.hasImage = normalized.hasImage;
+      clonedCard.mediaLoaded = normalized.mediaLoaded;
+    }
+
+    return clonedCard;
   }
 
   function cloneDeck(deck, options = {}) {
     const normalized = normalizeDeck(deck);
     if (!normalized) return null;
 
-    return {
+    const clonedDeck = {
       id: options.freshId ? createId("deck") : normalized.id,
       name: normalized.name,
       cards: normalized.cards
-        .map((card) => cloneCard(card, { freshId: options.freshCardIds }))
+        .map((card) => cloneCard(card, {
+          freshId: options.freshCardIds,
+          includeRuntimeMetadata: options.includeRuntimeMetadata
+        }))
         .filter(Boolean)
     };
+
+    if (options.includeRuntimeMetadata) {
+      clonedDeck.cardCount = normalized.cardCount;
+      clonedDeck.cardsHydrated = normalized.cardsHydrated;
+    }
+
+    return clonedDeck;
   }
 
   function createDeck(name) {
@@ -214,14 +277,23 @@
       frontText: fields.frontText,
       backText: fields.backText,
       image: fields.image,
+      imageThumb: fields.imageThumb,
+      imageStudy: fields.imageStudy,
       imageSide: fields.imageSide
     });
+  }
+
+  function getDeckCardCount(deck) {
+    const normalizedDeck = normalizeDeck(deck);
+    return normalizedDeck ? normalizedDeck.cardCount : 0;
   }
 
   function createStoragePayload(decks) {
     return {
       schemaVersion: DATA_SCHEMA_VERSION,
-      decks: dedupeDecks((decks || []).map((deck) => cloneDeck(deck)).filter(Boolean))
+      decks: dedupeDecksForStorage(
+        (decks || []).map((deck) => cloneDeck(deck, { includeRuntimeMetadata: true })).filter(Boolean)
+      )
     };
   }
 
@@ -229,7 +301,7 @@
     return {
       schemaVersion: DATA_SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
-      decks: createStoragePayload(decks).decks
+      decks: dedupeDecks((decks || []).map((deck) => cloneDeck(deck)).filter(Boolean))
     };
   }
 
@@ -575,6 +647,7 @@
     createId,
     createStoragePayload,
     deckFingerprint,
+    getDeckCardCount,
     mergeDecks,
     moveCardsBetweenDecks,
     normalizeCard,

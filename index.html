@@ -5,42 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title data-i18n="meta.title">Karto</title>
   <meta name="theme-color" content="#0d1014">
-  <link rel="manifest" href="manifest.webmanifest">
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; connect-src 'self' http://127.0.0.1:* http://localhost:* https://api.unsplash.com https://api-free.deepl.com https://api.deepl.com https://api.dictionaryapi.dev https://en.wiktionary.org https://de.wiktionary.org https://ru.wiktionary.org https://www.dwds.de; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+  >
   <link rel="icon" href="logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
-  <script>
-    (function() {
-      let theme = "system";
-      let language = document.documentElement.lang || "en";
-
-      try {
-        if (window.api && typeof window.api.getBootstrapSettingsSync === "function") {
-          const bootstrapSettings = window.api.getBootstrapSettingsSync() || {};
-          if (bootstrapSettings.themePreference) {
-            theme = bootstrapSettings.themePreference;
-          }
-          if (bootstrapSettings.languagePreference) {
-            language = bootstrapSettings.languagePreference;
-          }
-        } else {
-          theme = localStorage.getItem("karto.theme") || theme;
-          language = localStorage.getItem("language") || language;
-        }
-      } catch {
-        try {
-          theme = localStorage.getItem("karto.theme") || theme;
-          language = localStorage.getItem("language") || language;
-        } catch {
-          theme = "system";
-        }
-      }
-
-      document.documentElement.dataset.theme = theme || "system";
-      document.documentElement.lang = language || "en";
-    })();
-  </script>
 </head>
 <body>
+  <div id="bootScreen" class="boot-screen" role="status" aria-live="polite">
+    <div class="boot-mark">Karto</div>
+    <div class="boot-text" data-i18n="common.loading">Loading</div>
+  </div>
+
   <div class="mobile-topbar">
     <button
       id="sidebarToggleBtn"
@@ -514,6 +491,7 @@
 
   <script src="i18n.js"></script>
   <script src="js/data-model.js"></script>
+  <script src="js/image-utils.js"></script>
   <script src="js/dom-utils.js"></script>
   <script src="js/study-engine.js"></script>
   <script src="js/app-state.js"></script>
@@ -528,7 +506,6 @@
   <script src="js/views/card-form-view.js"></script>
   <script src="js/views/study-view.js"></script>
   <script src="js/views/settings-view.js"></script>
-  <script src="js/pwa.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

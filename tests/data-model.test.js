@@ -1,15 +1,136 @@
 const assert = require("node:assert/strict");
 
 const {
+  cardFingerprint,
   createCard,
   createDeck,
   createExportPayload,
+  createStoragePayload,
+  getDeckCardCount,
   moveCardsBetweenDecks,
   normalizeStoredDecks,
   prepareDeckImport,
   prepareLibraryImport,
   saveEditedCardToDeck
 } = require("../js/data-model.js");
+
+function testCardsPreserveImageThumb() {
+  const card = createCard({
+    frontText: "cat",
+    backText: "Katze",
+    image: "https://images.unsplash.com/photo-cat?w=1200",
+    imageThumb: "https://images.unsplash.com/photo-cat?w=480",
+    imageStudy: "https://images.unsplash.com/photo-cat?w=800",
+    imageSide: "front"
+  });
+  const deck = createDeck("Animals");
+  deck.cards.push(card);
+
+  const storedDecks = normalizeStoredDecks(createExportPayload([deck]));
+
+  assert.equal(card.imageThumb, "https://images.unsplash.com/photo-cat?w=480");
+  assert.equal(storedDecks[0].cards[0].imageThumb, card.imageThumb);
+  assert.equal(storedDecks[0].cards[0].imageStudy, card.imageStudy);
+  assert.equal(createExportPayload([deck]).decks[0].cards[0].imageThumb, card.imageThumb);
+}
+
+function testPartialDecksPreserveCardCountAndLightMedia() {
+  const decks = normalizeStoredDecks({
+    decks: [
+      {
+        id: "deck_partial",
+        name: "Partial",
+        cardCount: 12,
+        cardsHydrated: false,
+        cards: [
+          {
+            id: "card_partial",
+            frontText: "front",
+            backText: "back",
+            image: "",
+            imageThumb: "data:image/jpeg;base64,thumb",
+            imageStudy: "data:image/jpeg;base64,study",
+            imageSide: "back",
+            hasImage: true,
+            mediaLoaded: false
+          }
+        ]
+      }
+    ]
+  });
+
+  assert.equal(decks[0].cardCount, 12);
+  assert.equal(getDeckCardCount(decks[0]), 12);
+  assert.equal(decks[0].cardsHydrated, false);
+  assert.equal(decks[0].cards[0].image, "");
+  assert.equal(decks[0].cards[0].imageThumb, "data:image/jpeg;base64,thumb");
+  assert.equal(decks[0].cards[0].imageStudy, "data:image/jpeg;base64,study");
+  assert.equal(decks[0].cards[0].mediaLoaded, false);
+
+  const exportedDeck = createExportPayload(decks).decks[0];
+  assert.equal(Object.hasOwn(exportedDeck, "cardCount"), false);
+  assert.equal(Object.hasOwn(exportedDeck.cards[0], "mediaLoaded"), false);
+}
+
+function testStoragePayloadDoesNotFingerprintDedupePartialDecks() {
+  const firstPartial = {
+    id: "deck_partial_a",
+    name: "Same Preview",
+    cardCount: 10,
+    cardsHydrated: false,
+    cards: [
+      {
+        id: "card_preview_a",
+        frontText: "preview",
+        backText: "same",
+        image: ""
+      }
+    ]
+  };
+  const secondPartial = {
+    id: "deck_partial_b",
+    name: "Same Preview",
+    cardCount: 20,
+    cardsHydrated: false,
+    cards: [
+      {
+        id: "card_preview_b",
+        frontText: "preview",
+        backText: "same",
+        image: ""
+      }
+    ]
+  };
+
+  const payload = createStoragePayload([firstPartial, secondPartial]);
+  assert.deepEqual(
+    payload.decks.map((deck) => deck.id),
+    ["deck_partial_a", "deck_partial_b"]
+  );
+}
+
+function testImageThumbDoesNotAffectFingerprintOrDuplicateChecks() {
+  const first = createCard({
+    frontText: "cat",
+    backText: "Katze",
+    image: "https://example.com/cat.jpg",
+    imageThumb: "https://example.com/cat-small-a.jpg"
+  });
+  const second = createCard({
+    frontText: "cat",
+    backText: "Katze",
+    image: "https://example.com/cat.jpg",
+    imageThumb: "https://example.com/cat-small-b.jpg"
+  });
+  const targetDeck = createDeck("Target");
+  targetDeck.cards.push(first);
+
+  const result = prepareDeckImport([second], targetDeck);
+
+  assert.equal(cardFingerprint(first), cardFingerprint(second));
+  assert.equal(result.skippedCount, 1);
+  assert.equal(result.cards.length, 0);
+}
 
 function testNormalizeStoredDecksMigratesLegacyData() {
   const decks = normalizeStoredDecks([
@@ -270,6 +391,10 @@ function testSaveEditedCardToDeckHandlesTargetIdCollision() {
   );
 }
 
+testCardsPreserveImageThumb();
+testPartialDecksPreserveCardCountAndLightMedia();
+testStoragePayloadDoesNotFingerprintDedupePartialDecks();
+testImageThumbDoesNotAffectFingerprintOrDuplicateChecks();
 testNormalizeStoredDecksMigratesLegacyData();
 testPrepareLibraryImportHandlesDuplicatesAndIdCollisions();
 testPrepareDeckImportHandlesDuplicatesAndIdCollisions();

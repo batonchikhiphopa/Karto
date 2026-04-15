@@ -1,0 +1,554 @@
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
+const { test, expect, _electron } = require("@playwright/test");
+
+const projectRoot = path.resolve(__dirname, "..", "..");
+
+async function launchKarto(options = {}) {
+  const userDataDir = options.userDataDir || fs.mkdtempSync(path.join(os.tmpdir(), "karto-e2e-"));
+  const electronApp = await _electron.launch({
+    args: [projectRoot],
+    cwd: projectRoot,
+    env: {
+      ...process.env,
+      ...(options.env || {}),
+      KARTO_E2E: "1",
+      KARTO_USER_DATA_DIR: userDataDir,
+      ELECTRON_DISABLE_SECURITY_WARNINGS: "true"
+    }
+  });
+
+  const page = await electronApp.firstWindow();
+  await page.waitForSelector("#appMain");
+  if (options.waitForReady !== false) {
+    await page.waitForFunction(() => !!window.__kartoE2E);
+    if (options.clearData !== false) {
+      await page.evaluate(() => window.__kartoE2E.clearAllData());
+    }
+  }
+
+  return {
+    electronApp,
+    page,
+    userDataDir
+  };
+}
+
+async function closeKarto(electronApp, userDataDir, options = {}) {
+  await electronApp.close();
+  if (options.removeUserDataDir !== false) {
+    fs.rmSync(userDataDir, {
+      recursive: true,
+      force: true
+    });
+  }
+}
+
+async function createDeck(page, name) {
+  await page.locator("[data-action='create-deck']").click();
+  const nameInput = page.locator("[data-deck-name-input='true']");
+  await expect(nameInput).toBeVisible();
+  await nameInput.fill(name);
+  await nameInput.press("Enter");
+  await expect(page.locator("#editDeckTitle")).toContainText(name);
+}
+
+async function addCard(page, front, back) {
+  await page.locator("#editDeckCreateCardBtn").click();
+  await expect(page.locator("#createCardScreen")).toHaveClass(/is-active/);
+  await page.locator("#frontTextInput").fill(front);
+  await page.locator("#backTextInput").fill(back);
+  await page.locator("#saveCardBtn").click();
+  await expect(page.locator("#editDeckScreen")).toHaveClass(/is-active/);
+  await expect(page.locator("#editDeckCardList")).toContainText(front);
+}
+
+function createSvgDataUrl(label, color) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420"><rect width="640" height="420" fill="${color}"/><text x="40" y="220" font-size="56" fill="white">${label}</text></svg>`
+  )}`;
+}
+
+function writeSvgImageFile(directory, filename, label, color) {
+  const filePath = path.join(directory, filename);
+  fs.writeFileSync(
+    filePath,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000"><rect width="1600" height="1000" fill="${color}"/><text x="120" y="520" font-size="120" fill="white">${label}</text></svg>`
+  );
+  return filePath;
+}
+
+const studyRuleCards = [
+  {
+    id: "card_study_rule_1",
+    frontText: "rule front one",
+    backText: "rule back one",
+    image: ""
+  },
+  {
+    id: "card_study_rule_2",
+    frontText: "rule front two",
+    backText: "rule back two",
+    image: ""
+  },
+  {
+    id: "card_study_rule_3",
+    frontText: "rule front three",
+    backText: "rule back three",
+    image: ""
+  }
+];
+
+function getStudyRuleCardByFrontText(frontText) {
+  return studyRuleCards.find((card) => card.frontText === frontText);
+}
+
+async function getStudyCardText(studyCard) {
+  return (await studyCard.innerText()).trim();
+}
+
+async function getStudyProgressEntry(page, cardId) {
+  return page.evaluate((id) => window.__kartoE2E.snapshot().studyProgress[id] || null, cardId);
+}
+
+async function moveStudyPointerToTopEdge(page) {
+  await page.evaluate(() => {
+    window.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true,
+      clientX: Math.floor(window.innerWidth / 2),
+      clientY: 4
+    }));
+  });
+}
+
+async function dispatchStudyEdgeClick(page, elementId, pointName) {
+  await page.evaluate(({ targetId, point }) => {
+    const target = document.getElementById(targetId);
+    if (!target) {
+      throw new Error(`Missing study edge: ${targetId}`);
+    }
+
+    const points = {
+      left: { clientX: 12, clientY: Math.floor(window.innerHeight / 2) },
+      right: { clientX: window.innerWidth - 12, clientY: Math.floor(window.innerHeight / 2) },
+      bottom: { clientX: Math.floor(window.innerWidth / 2), clientY: window.innerHeight - 12 }
+    };
+    const coords = points[point];
+
+    target.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+      clientX: coords.clientX,
+      clientY: coords.clientY
+    }));
+  }, { targetId: elementId, point: pointName });
+}
+
+async function startStudyRuleDeck(page) {
+  await page.evaluate(() => window.__kartoE2E.clearAllData());
+  await page.evaluate((cards) => {
+    return window.__kartoE2E.importLibraryPayload({
+      schemaVersion: 2,
+      decks: [
+        {
+          id: "deck_study_rules",
+          name: "Study Rules",
+          cards
+        }
+      ]
+    });
+  }, studyRuleCards);
+  await expect(page.locator(".deck-tile[data-deck-id='deck_study_rules'] .deck-tile-name")).toContainText("Study Rules");
+  await page.locator("[data-action='study'][data-deck-id='deck_study_rules']").click();
+  await expect(page.locator("#studyScreen")).toHaveClass(/is-active/);
+
+  const studyCard = page.locator("#studyCard");
+  await expect.poll(async () => getStudyCardText(studyCard)).not.toBe("");
+  return studyCard;
+}
+
+async function getCurrentStudyRuleCard(studyCard) {
+  const frontText = await getStudyCardText(studyCard);
+  const currentCard = getStudyRuleCardByFrontText(frontText);
+  expect(currentCard).toBeTruthy();
+  return currentCard;
+}
+
+async function expectStudyCardOnNextFront(studyCard, previousCard) {
+  await expect.poll(async () => {
+    const card = getStudyRuleCardByFrontText(await getStudyCardText(studyCard));
+    return card && card.id !== previousCard.id ? card.id : null;
+  }).not.toBeNull();
+}
+
+test("desktop smoke: create cards, study back, export/import", async () => {
+  const { electronApp, page, userDataDir } = await launchKarto();
+
+  try {
+    await createDeck(page, "E2E Deck");
+    await addCard(page, "alpha", "first answer");
+    await addCard(page, "beta", "second answer");
+
+    await page.locator("#startDeckStudyBtn").click();
+    await expect(page.locator("#studyScreen")).toHaveClass(/is-active/);
+
+    const studyCard = page.locator("#studyCard");
+    const firstFront = (await studyCard.innerText()).trim();
+    expect(firstFront.length).toBeGreaterThan(0);
+
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(async () => (await studyCard.innerText()).trim()).not.toBe(firstFront);
+
+    await page.keyboard.press("ArrowUp");
+    await expect(studyCard).toContainText(firstFront);
+
+    const exportedPayload = await page.evaluate(() => window.__kartoE2E.exportLibraryPayload());
+    expect(exportedPayload.decks).toHaveLength(1);
+    expect(exportedPayload.decks[0].cards).toHaveLength(2);
+
+    await page.evaluate(() => window.__kartoE2E.clearAllData());
+    await expect(page.locator(".deck-tile-name")).toHaveCount(0);
+
+    const importResult = await page.evaluate((payload) => {
+      return window.__kartoE2E.importLibraryPayload(payload);
+    }, exportedPayload);
+    expect(importResult.addedCount).toBe(1);
+    await expect(page.locator(".deck-tile-name")).toContainText("E2E Deck");
+
+    const fullImage = createSvgDataUrl("FULL", "#0f766e");
+    const thumbImage = createSvgDataUrl("THUMB", "#be123c");
+    const bigDeckCards = Array.from({ length: 8 }, (_, index) => ({
+      id: `card_big_${index + 1}`,
+      frontText: `big front ${index + 1}`,
+      backText: `big back ${index + 1}`,
+      image: createSvgDataUrl(`BIGFULL${index + 1}`, "#1d4ed8"),
+      imageThumb: createSvgDataUrl(`BIGTHUMB${index + 1}`, "#9333ea"),
+      imageSide: "front"
+    }));
+    const visualPayload = {
+      schemaVersion: 2,
+      decks: [
+        {
+          id: "deck_visual",
+          name: "Visual Deck",
+          cards: [
+            {
+              id: "card_visual",
+              frontText: "image front",
+              backText: "image back",
+              image: fullImage,
+              imageThumb: thumbImage,
+              imageSide: "front"
+            }
+          ]
+        },
+        {
+          id: "deck_big",
+          name: "Big Visual Deck",
+          cards: bigDeckCards
+        }
+      ]
+    };
+
+    await page.evaluate(() => window.__kartoE2E.clearAllData());
+    await page.evaluate((payload) => window.__kartoE2E.importLibraryPayload(payload), visualPayload);
+    await expect(page.locator(".deck-tile[data-deck-id='deck_visual'] .deck-tile-name")).toContainText("Visual Deck");
+    await expect(page.locator(".deck-tile[data-deck-id='deck_visual'] .deck-media-image.is-active")).toHaveAttribute("src", thumbImage);
+
+    const bigDeckSrc = await page.locator(".deck-tile[data-deck-id='deck_big'] .deck-media-image.is-active").getAttribute("src");
+    expect(bigDeckSrc).toContain("BIGTHUMB");
+
+    const homeSnapshot = await page.evaluate(() => window.__kartoE2E.snapshot());
+    expect(homeSnapshot.homeMediaCache.deck_visual.images).toContain(thumbImage);
+    expect(homeSnapshot.homeMediaCache.deck_big.images).toHaveLength(8);
+
+    const retainedSrc = await page.evaluate(() => {
+      const tile = document.querySelector(".deck-tile[data-deck-id='deck_visual']");
+      tile.dataset.probe = "kept";
+      return tile.querySelector(".deck-media-image.is-active").getAttribute("src");
+    });
+    await page.locator(".sidebar-link[data-nav='libraryScreen']").click();
+    await expect(page.locator("#libraryScreen")).toHaveClass(/is-active/);
+    await page.locator(".sidebar-link[data-nav='homeScreen']").click();
+    await expect(page.locator(".deck-tile[data-deck-id='deck_visual'][data-probe='kept']")).toHaveCount(1);
+    await expect(page.locator(".deck-tile[data-deck-id='deck_visual'] .deck-media-image.is-active")).toHaveAttribute("src", retainedSrc);
+
+    await page.locator("[data-action='study'][data-deck-id='deck_visual']").click();
+    await expect(page.locator("#studyScreen")).toHaveClass(/is-active/);
+    await expect(page.locator(".study-card-img")).toHaveAttribute("src", thumbImage);
+
+    const visualExport = await page.evaluate(() => window.__kartoE2E.exportLibraryPayload());
+    expect(visualExport.decks.find((deck) => deck.id === "deck_visual").cards[0].imageThumb).toBe(thumbImage);
+    expect(visualExport.decks.some((deck) => Object.hasOwn(deck, "homeMediaCache"))).toBe(false);
+  } finally {
+    await closeKarto(electronApp, userDataDir);
+  }
+});
+
+test("desktop study mode: first image card can use thumbnail without blocking", async () => {
+  const { electronApp, page, userDataDir } = await launchKarto();
+
+  try {
+    const thumbImage = createSvgDataUrl("THUMB STUDY", "#a21caf");
+
+    await page.evaluate((payload) => window.__kartoE2E.importLibraryPayload(payload), {
+      schemaVersion: 2,
+      decks: [
+        {
+          id: "deck_delayed_visual",
+          name: "Delayed Visual",
+          cards: [
+            {
+              id: "card_delayed_visual",
+              frontText: "delayed image front",
+              backText: "delayed image back",
+              image: "",
+              imageThumb: thumbImage,
+              imageSide: "front"
+            }
+          ]
+        }
+      ]
+    });
+
+    await page.locator("[data-action='study'][data-deck-id='deck_delayed_visual']").click();
+    await expect(page.locator("#studyScreen")).toHaveClass(/is-active/);
+
+    const studyCard = page.locator("#studyCard");
+    await expect(page.locator(".study-card-img")).toHaveAttribute("src", thumbImage);
+    await studyCard.click();
+    await expect(studyCard).toContainText("delayed image back");
+  } finally {
+    await closeKarto(electronApp, userDataDir);
+  }
+});
+
+test("desktop startup preselects study preview cards before deck click", async () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "karto-e2e-preselect-"));
+  let electronApp = null;
+  let page;
+
+  try {
+    ({ electronApp, page } = await launchKarto({ userDataDir }));
+
+    const cards = Array.from({ length: 6 }, (_, index) => ({
+      id: `card_preselect_${index + 1}`,
+      frontText: `preselect front ${index + 1}`,
+      backText: `preselect back ${index + 1}`,
+      image: createSvgDataUrl(`PRESELECT FULL ${index + 1}`, "#1d4ed8"),
+      imageThumb: createSvgDataUrl(`PRESELECT THUMB ${index + 1}`, "#be123c"),
+      imageSide: "front"
+    }));
+
+    await page.evaluate((payload) => window.__kartoE2E.importLibraryPayload(payload), {
+      schemaVersion: 2,
+      decks: [
+        {
+          id: "deck_preselect",
+          name: "Preselect",
+          cards
+        }
+      ]
+    });
+
+    await closeKarto(electronApp, userDataDir, { removeUserDataDir: false });
+    electronApp = null;
+
+    ({ electronApp, page } = await launchKarto({
+      userDataDir,
+      clearData: false,
+      waitForReady: false,
+      env: {
+        KARTO_E2E_STARTUP_PREWARM_DELAY_MS: "450"
+      }
+    }));
+
+    await expect(page.locator("#bootScreen")).toBeVisible();
+    await page.waitForFunction(() => !!window.__kartoE2E);
+    await expect(page.locator("#bootScreen")).toBeHidden();
+
+    const previewCards = await page.evaluate(() => {
+      const snapshot = window.__kartoE2E.snapshot();
+      return snapshot.decks.decks.find((deck) => deck.id === "deck_preselect").cards;
+    });
+
+    expect(previewCards).toHaveLength(5);
+    expect(previewCards.every((card) => card.image === "" && card.imageStudy === "" && card.imageThumb)).toBe(true);
+
+    await page.locator("[data-action='study'][data-deck-id='deck_preselect']").click();
+    await expect(page.locator("#studyScreen")).toHaveClass(/is-active/);
+
+    const studyCard = page.locator("#studyCard");
+    for (let index = 0; index < previewCards.length; index += 1) {
+      await expect(studyCard).toContainText(previewCards[index].frontText);
+      await expect(page.locator(".study-card-img")).toHaveAttribute("src", previewCards[index].imageThumb);
+
+      if (index < previewCards.length - 1) {
+        await page.keyboard.press("ArrowRight");
+      }
+    }
+  } finally {
+    if (electronApp) {
+      await closeKarto(electronApp, userDataDir);
+    } else {
+      fs.rmSync(userDataDir, {
+        recursive: true,
+        force: true
+      });
+    }
+  }
+});
+
+test("desktop image storage: local uploads and old imports export lightweight media", async () => {
+  const { electronApp, page, userDataDir } = await launchKarto();
+
+  try {
+    await createDeck(page, "Light Images");
+    await page.locator("#editDeckCreateCardBtn").click();
+    await expect(page.locator("#createCardScreen")).toHaveClass(/is-active/);
+    await page.locator("#frontTextInput").fill("light front");
+    await page.locator("#backTextInput").fill("light back");
+    await page.locator("#imageSideFrontBtn").click();
+    await page.locator("#imageFileInput").setInputFiles(
+      writeSvgImageFile(userDataDir, "local-upload.svg", "LOCAL ORIGINAL", "#0f766e")
+    );
+    await expect.poll(() => page.locator("#imageInput").inputValue()).toContain("data:image/jpeg");
+    await page.locator("#saveCardBtn").click();
+    await expect(page.locator("#editDeckScreen")).toHaveClass(/is-active/);
+    await page.waitForTimeout(250);
+
+    let exportedPayload = await page.evaluate(() => window.__kartoE2E.exportLibraryPayload());
+    let exportedCard = exportedPayload.decks[0].cards[0];
+    expect(exportedCard.image).toContain("data:image/jpeg");
+    expect(exportedCard.imageThumb).toContain("data:image/jpeg");
+    expect(exportedCard.imageStudy).toBe("");
+
+    await page.locator("#startDeckStudyBtn").click();
+    await expect(page.locator("#studyScreen")).toHaveClass(/is-active/);
+    await expect(page.locator(".study-card-img")).toHaveAttribute("src", exportedCard.imageThumb);
+
+    const oldFullImage = createSvgDataUrl("OLD FULL", "#1d4ed8");
+    const oldStudyImage = createSvgDataUrl("OLD STUDY", "#15803d");
+    const oldThumbImage = createSvgDataUrl("OLD THUMB", "#be123c");
+
+    await page.evaluate(() => window.__kartoE2E.clearAllData());
+    await page.evaluate((payload) => window.__kartoE2E.importLibraryPayload(payload), {
+      schemaVersion: 2,
+      decks: [
+        {
+          id: "deck_old_media",
+          name: "Old Media",
+          cards: [
+            {
+              id: "card_old_media",
+              frontText: "old front",
+              backText: "old back",
+              image: oldFullImage,
+              imageThumb: oldThumbImage,
+              imageStudy: oldStudyImage,
+              imageSide: "front"
+            }
+          ]
+        }
+      ]
+    });
+
+    exportedPayload = await page.evaluate(() => window.__kartoE2E.exportLibraryPayload());
+    exportedCard = exportedPayload.decks[0].cards[0];
+    expect(exportedCard.image).toBe(oldStudyImage);
+    expect(exportedCard.imageThumb).toBe(oldThumbImage);
+    expect(exportedCard.imageStudy).toBe("");
+  } finally {
+    await closeKarto(electronApp, userDataDir);
+  }
+});
+
+test("desktop study mode: revealed answers advance with the intended result", async () => {
+  const { electronApp, page, userDataDir } = await launchKarto();
+
+  try {
+    let studyCard = await startStudyRuleDeck(page);
+    let currentCard = await getCurrentStudyRuleCard(studyCard);
+
+    await page.keyboard.press("ArrowRight");
+    await expectStudyCardOnNextFront(studyCard, currentCard);
+    await expect.poll(async () => {
+      const entry = await getStudyProgressEntry(page, currentCard.id);
+      return entry ? `${entry.lastResult}:${entry.correctCount}` : null;
+    }).toBe("correct:1");
+
+    const answeredCard = currentCard;
+    currentCard = await getCurrentStudyRuleCard(studyCard);
+    await page.keyboard.press("ArrowLeft");
+    await expect(studyCard).toContainText(currentCard.backText);
+    await page.keyboard.press("ArrowUp");
+    await expect(studyCard).toContainText(answeredCard.frontText);
+    expect(await getStudyProgressEntry(page, currentCard.id)).toBeNull();
+    await expect.poll(async () => getStudyProgressEntry(page, answeredCard.id)).toBeNull();
+
+    studyCard = await startStudyRuleDeck(page);
+    currentCard = await getCurrentStudyRuleCard(studyCard);
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(studyCard).toContainText(currentCard.backText);
+    await studyCard.click();
+    await expectStudyCardOnNextFront(studyCard, currentCard);
+    await expect.poll(async () => {
+      return (await getStudyProgressEntry(page, currentCard.id))?.lastResult || null;
+    }).toBe("wrong");
+
+    studyCard = await startStudyRuleDeck(page);
+    currentCard = await getCurrentStudyRuleCard(studyCard);
+
+    await page.keyboard.press("ArrowDown");
+    await expect(studyCard).toContainText(currentCard.backText);
+    await page.keyboard.press("ArrowRight");
+    await expectStudyCardOnNextFront(studyCard, currentCard);
+    await expect.poll(async () => {
+      const entry = await getStudyProgressEntry(page, currentCard.id);
+      return entry ? `${entry.lastResult}:${entry.correctCount}` : null;
+    }).toBe("correct:1");
+
+    studyCard = await startStudyRuleDeck(page);
+    currentCard = await getCurrentStudyRuleCard(studyCard);
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(studyCard).toContainText(currentCard.backText);
+    await moveStudyPointerToTopEdge(page);
+    await dispatchStudyEdgeClick(page, "unsureZone", "bottom");
+    await expectStudyCardOnNextFront(studyCard, currentCard);
+    await expect.poll(async () => {
+      return (await getStudyProgressEntry(page, currentCard.id))?.lastResult || null;
+    }).toBe("unsure");
+
+    studyCard = await startStudyRuleDeck(page);
+    currentCard = await getCurrentStudyRuleCard(studyCard);
+
+    await studyCard.click();
+    await expect(studyCard).toContainText(currentCard.backText);
+    await dispatchStudyEdgeClick(page, "wrongZone", "left");
+    await expectStudyCardOnNextFront(studyCard, currentCard);
+    await expect.poll(async () => {
+      return (await getStudyProgressEntry(page, currentCard.id))?.lastResult || null;
+    }).toBe("wrong");
+
+    studyCard = await startStudyRuleDeck(page);
+    currentCard = await getCurrentStudyRuleCard(studyCard);
+
+    await studyCard.click();
+    await expect(studyCard).toContainText(currentCard.backText);
+    await studyCard.click();
+    await expect(studyCard).toContainText(currentCard.frontText);
+    expect(await getStudyProgressEntry(page, currentCard.id)).toBeNull();
+    await page.keyboard.press("ArrowDown");
+    await expectStudyCardOnNextFront(studyCard, currentCard);
+    await expect.poll(async () => {
+      return (await getStudyProgressEntry(page, currentCard.id))?.lastResult || null;
+    }).toBe("unsure");
+  } finally {
+    await closeKarto(electronApp, userDataDir);
+  }
+});

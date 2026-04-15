@@ -87,53 +87,45 @@ async function testDefaultRuntimeUsesCapturedGlobalRoot() {
   }
 }
 
-async function testFallbackUses127HostAfterSameOrigin404() {
+async function testSameOrigin404DoesNotProbeLocalFallbacks() {
   const { calls, runtime } = createRuntime("http://127.0.0.1:5500/", async (url) => {
-    if (url.startsWith("http://127.0.0.1:5500/api/")) {
-      return createJsonResponse(404, { error: "Not found" });
-    }
-
-    if (url.startsWith("http://127.0.0.1:3000/api/")) {
-      return createJsonResponse(200, { definition: "A small cat." });
-    }
-
-    throw new Error(`Unexpected URL: ${url}`);
+    assert.equal(url, "http://127.0.0.1:5500/api/define?word=cat&dictLang=en&lang=ru");
+    return createJsonResponse(404, { error: "Not found" });
   });
 
   const client = createApiClient({ root: runtime });
-  const first = await client.fetchDefinition("cat", "en");
-  const second = await client.fetchDefinition("dog", "en");
+  const response = await client.fetchDefinition("cat", "en");
 
-  assert.equal(first.ok, true);
-  assert.equal(second.ok, true);
+  assert.equal(response.ok, false);
+  assert.equal(response.status, 404);
   assert.deepEqual(
     calls.map((entry) => entry.url),
     [
-      "http://127.0.0.1:5500/api/define?word=cat&dictLang=en&lang=ru",
-      "http://127.0.0.1:3000/api/define?word=cat&dictLang=en&lang=ru",
-      "http://127.0.0.1:3000/api/define?word=dog&dictLang=en&lang=ru"
+      "http://127.0.0.1:5500/api/define?word=cat&dictLang=en&lang=ru"
     ]
   );
 }
 
-async function testFallbackUsesLocalhostWhen127Fails() {
+async function testExplicitApiBasesCanFallbackOn404AndRememberSuccess() {
   const { calls, runtime } = createRuntime("http://localhost:5500/", async (url) => {
-    if (url.startsWith("http://localhost:5500/api/")) {
+    if (url.startsWith("https://primary.example/api/")) {
       return createJsonResponse(404, { error: "Not found" });
     }
 
-    if (url.startsWith("http://127.0.0.1:3000/api/")) {
-      throw new TypeError("Failed to fetch");
-    }
-
-    if (url.startsWith("http://localhost:3000/api/")) {
+    if (url.startsWith("https://backup.example/api/")) {
       return createJsonResponse(200, { images: [] });
     }
 
     throw new Error(`Unexpected URL: ${url}`);
   });
 
-  const client = createApiClient({ root: runtime });
+  const client = createApiClient({
+    root: runtime,
+    apiBases: [
+      "https://primary.example/api",
+      "https://backup.example/api"
+    ]
+  });
   const first = await client.searchImages("cat");
   const second = await client.searchImages("dog");
 
@@ -142,10 +134,9 @@ async function testFallbackUsesLocalhostWhen127Fails() {
   assert.deepEqual(
     calls.map((entry) => entry.url),
     [
-      "http://localhost:5500/api/images?query=cat&lang=ru",
-      "http://127.0.0.1:3000/api/images?query=cat&lang=ru",
-      "http://localhost:3000/api/images?query=cat&lang=ru",
-      "http://localhost:3000/api/images?query=dog&lang=ru"
+      "https://primary.example/api/images?query=cat&lang=ru",
+      "https://backup.example/api/images?query=cat&lang=ru",
+      "https://backup.example/api/images?query=dog&lang=ru"
     ]
   );
 }
@@ -181,8 +172,8 @@ async function testDoesNotFallbackOnRateLimiting() {
 (async () => {
   await testSameOriginOnApiServerSkipsFallbacks();
   await testDefaultRuntimeUsesCapturedGlobalRoot();
-  await testFallbackUses127HostAfterSameOrigin404();
-  await testFallbackUsesLocalhostWhen127Fails();
+  await testSameOrigin404DoesNotProbeLocalFallbacks();
+  await testExplicitApiBasesCanFallbackOn404AndRememberSuccess();
   await testDoesNotFallbackOnServerErrors();
   await testDoesNotFallbackOnRateLimiting();
 

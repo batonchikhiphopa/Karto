@@ -204,7 +204,7 @@
         enterFrontWord: "Enter a word on the front side.",
         enterBackText: "Enter text on the back side.",
         definitionNotFound: "Definition not found.",
-        serverUnavailable: "Server is unavailable. Start `node server.js`.",
+        serverUnavailable: "The local lookup service is unavailable. Restart Karto.",
         nothingFound: "Nothing found.",
         needTwoDecks: "You need at least 2 decks to merge.",
         chooseTwoDecks: "Choose at least 2 decks.",
@@ -428,7 +428,7 @@
         enterFrontWord: "Введи слово на лицевой стороне.",
         enterBackText: "Введи текст на обратной стороне.",
         definitionNotFound: "Определение не найдено.",
-        serverUnavailable: "Сервер недоступен. Запусти `node server.js`.",
+        serverUnavailable: "Локальный сервис поиска недоступен. Перезапусти Karto.",
         nothingFound: "Ничего не найдено.",
         needTwoDecks: "Для объединения нужно минимум две колоды.",
         chooseTwoDecks: "Выбери минимум две колоды.",
@@ -647,7 +647,7 @@
         enterFrontWord: "Gib ein Wort auf der Vorderseite ein.",
         enterBackText: "Gib Text auf der Rückseite ein.",
         definitionNotFound: "Definition nicht gefunden.",
-        serverUnavailable: "Server ist nicht verfügbar. Starte `node server.js`.",
+        serverUnavailable: "Der lokale Nachschlagedienst ist nicht verfügbar. Starte Karto neu.",
         nothingFound: "Nichts gefunden.",
         needTwoDecks: "Zum Zusammenführen brauchst du mindestens zwei Decks.",
         chooseTwoDecks: "Wähle mindestens zwei Decks.",
@@ -679,18 +679,10 @@
 
   let currentLanguage = FALLBACK_LANG;
 
-  function getStorage() {
-    try {
-      return root.localStorage || null;
-    } catch {
-      return null;
-    }
-  }
-
   function resolveStorageOption(options = {}) {
     return Object.prototype.hasOwnProperty.call(options, "storage")
       ? options.storage
-      : getStorage();
+      : null;
   }
 
   function hasDom() {

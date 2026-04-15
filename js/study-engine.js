@@ -64,6 +64,39 @@
     studyState.currentIndex = 0;
   }
 
+  function normalizePreferredCardIds(value) {
+    const seen = new Set();
+    return (Array.isArray(value) ? value : [])
+      .map((cardId) => (typeof cardId === "string" ? cardId.trim() : ""))
+      .filter((cardId) => {
+        if (!cardId || seen.has(cardId)) {
+          return false;
+        }
+
+        seen.add(cardId);
+        return true;
+      });
+  }
+
+  function movePreferredCardsToFront(cards, preferredCardIds) {
+    const preferredIds = normalizePreferredCardIds(preferredCardIds);
+    if (!preferredIds.length || !Array.isArray(cards) || cards.length < 2) {
+      return cards;
+    }
+
+    const cardsById = new Map(cards.map((card) => [card.id, card]));
+    const preferredCards = preferredIds
+      .map((cardId) => cardsById.get(cardId))
+      .filter(Boolean);
+
+    if (!preferredCards.length) {
+      return cards;
+    }
+
+    const preferredIdSet = new Set(preferredCards.map((card) => card.id));
+    return preferredCards.concat(cards.filter((card) => !preferredIdSet.has(card.id)));
+  }
+
   function advanceToNextAvailableRound(studyState, randomFn = Math.random) {
     if (!studyState.allCards.length) {
       studyState.queue = [];
@@ -97,6 +130,57 @@
     return Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : 0;
   }
 
+  function cloneCards(cards) {
+    return Array.isArray(cards) ? cards.map((card) => ({ ...card })) : [];
+  }
+
+  function cloneDueRounds(dueRounds) {
+    return dueRounds && typeof dueRounds === "object" ? { ...dueRounds } : {};
+  }
+
+  function cloneRoundCardIds(roundCardIds) {
+    return roundCardIds instanceof Set ? Array.from(roundCardIds) : [];
+  }
+
+  function cloneProgressEntry(entry) {
+    if (!entry || typeof entry !== "object") {
+      return null;
+    }
+
+    return {
+      seenCount: Number.isFinite(Number(entry.seenCount)) ? Math.max(0, Math.round(Number(entry.seenCount))) : 0,
+      correctCount: Number.isFinite(Number(entry.correctCount)) ? Math.max(0, Math.round(Number(entry.correctCount))) : 0,
+      lastResult: typeof entry.lastResult === "string" && entry.lastResult ? entry.lastResult : null,
+      lastReviewedAt: typeof entry.lastReviewedAt === "string" && entry.lastReviewedAt ? entry.lastReviewedAt : null
+    };
+  }
+
+  function createUndoSnapshot(studyState) {
+    return {
+      queue: cloneCards(studyState.queue),
+      currentIndex: studyState.currentIndex,
+      currentRound: studyState.currentRound,
+      dueRounds: cloneDueRounds(studyState.dueRounds),
+      roundCardIds: cloneRoundCardIds(studyState.roundCardIds),
+      completedRounds: studyState.completedRounds,
+      sessionCompletedRounds: studyState.sessionCompletedRounds
+    };
+  }
+
+  function resolveAdvanceOptions(randomFn, undoMeta) {
+    if (typeof randomFn === "function") {
+      return {
+        randomFn,
+        undoMeta: undoMeta || {}
+      };
+    }
+
+    return {
+      randomFn: Math.random,
+      undoMeta: randomFn || {}
+    };
+  }
+
   function createStudyState(deck, randomFn = Math.random, options = {}) {
     const cards = Array.isArray(deck?.cards) ? deck.cards : [];
     const allCards = cards.map((card) => ({ ...card }));
@@ -122,6 +206,7 @@
     };
 
     buildRoundQueue(studyState, randomFn);
+    studyState.queue = movePreferredCardsToFront(studyState.queue, options.preferredCardIds);
     return studyState;
   }
 
@@ -129,14 +214,16 @@
     return studyState.queue[studyState.currentIndex] || null;
   }
 
-  function rememberCurrentCard(studyState) {
+  function rememberCurrentCard(studyState, result, undoMeta = {}) {
     const currentCard = getCurrentStudyCard(studyState);
     if (!currentCard) return;
 
-    const lastCardId = studyState.history[studyState.history.length - 1];
-    if (lastCardId !== currentCard.id) {
-      studyState.history.push(currentCard.id);
-    }
+    studyState.history.push({
+      cardId: currentCard.id,
+      result: normalizeResult(result),
+      previousProgressEntry: cloneProgressEntry(undoMeta.previousProgressEntry),
+      snapshot: createUndoSnapshot(studyState)
+    });
   }
 
   function scheduleCurrentCard(studyState, result, randomFn = Math.random) {
@@ -163,11 +250,12 @@
     }
   }
 
-  function advanceStudy(studyState, result, randomFn = Math.random) {
+  function advanceStudy(studyState, result, randomFn = Math.random, undoMeta = {}) {
     if (!studyState.queue.length) return;
 
-    rememberCurrentCard(studyState);
-    scheduleCurrentCard(studyState, result, randomFn);
+    const options = resolveAdvanceOptions(randomFn, undoMeta);
+    rememberCurrentCard(studyState, result, options.undoMeta);
+    scheduleCurrentCard(studyState, result, options.randomFn);
     studyState.flipped = false;
     studyState.pendingAnswer = null;
   }
@@ -182,16 +270,17 @@
     return true;
   }
 
-  function commitPendingStudyAnswer(studyState, randomFn = Math.random) {
+  function commitPendingStudyAnswer(studyState, randomFn = Math.random, undoMeta = {}) {
     if (!studyState.pendingAnswer || !studyState.queue.length) {
       return null;
     }
 
+    const options = resolveAdvanceOptions(randomFn, undoMeta);
     const committedAnswer = {
       result: studyState.pendingAnswer.result
     };
 
-    advanceStudy(studyState, committedAnswer.result, randomFn);
+    advanceStudy(studyState, committedAnswer.result, options.randomFn, options.undoMeta);
     return committedAnswer;
   }
 
@@ -205,6 +294,38 @@
     return true;
   }
 
+  function undoStudyAnswer(studyState) {
+    if (!Array.isArray(studyState.history) || studyState.history.length === 0) {
+      return null;
+    }
+
+    const undoEntry = studyState.history.pop();
+    const snapshot = undoEntry?.snapshot;
+    if (!snapshot || typeof snapshot !== "object") {
+      return null;
+    }
+
+    studyState.queue = cloneCards(snapshot.queue);
+    studyState.currentIndex = Number.isInteger(snapshot.currentIndex)
+      ? Math.max(0, Math.min(snapshot.currentIndex, Math.max(0, studyState.queue.length - 1)))
+      : 0;
+    studyState.currentRound = Number.isFinite(Number(snapshot.currentRound))
+      ? Math.max(1, Math.round(Number(snapshot.currentRound)))
+      : 1;
+    studyState.dueRounds = cloneDueRounds(snapshot.dueRounds);
+    studyState.roundCardIds = new Set(Array.isArray(snapshot.roundCardIds) ? snapshot.roundCardIds : []);
+    studyState.completedRounds = normalizeCompletedRounds(snapshot.completedRounds);
+    studyState.sessionCompletedRounds = normalizeCompletedRounds(snapshot.sessionCompletedRounds);
+    studyState.flipped = false;
+    studyState.pendingAnswer = null;
+
+    return {
+      cardId: undoEntry.cardId,
+      result: normalizeResult(undoEntry.result),
+      previousProgressEntry: cloneProgressEntry(undoEntry.previousProgressEntry)
+    };
+  }
+
   return {
     advanceStudy,
     cancelPendingStudyAnswer,
@@ -213,9 +334,11 @@
     getCurrentStudyCard,
     getResultDelay,
     getStudyBase,
+    movePreferredCardsToFront,
     queuePendingStudyAnswer,
     rememberCurrentCard,
     scheduleCurrentCard,
-    shuffleCards
+    shuffleCards,
+    undoStudyAnswer
   };
 });
