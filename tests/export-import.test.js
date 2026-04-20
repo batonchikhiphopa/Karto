@@ -15,6 +15,7 @@ function testExportImportRoundTripKeepsData() {
     createCard({
       frontText: "cat",
       backText: "Katze",
+      extraSides: [{ id: "side_cat_1", text: "small animal" }],
       image: "https://example.com/cat.jpg",
       imageThumb: "https://example.com/cat-thumb.jpg"
     }),
@@ -30,6 +31,10 @@ function testExportImportRoundTripKeepsData() {
   const importResult = prepareLibraryImport(exportPayload, []);
 
   assert.equal(importResult.isValid, true);
+  assert.deepEqual(
+    importResult.decks[0].cards[0].extraSides,
+    [{ id: "side_cat_1", text: "small animal" }]
+  );
   assert.deepEqual(
     createStoragePayload(importResult.decks),
     createStoragePayload([deckA, deckB])

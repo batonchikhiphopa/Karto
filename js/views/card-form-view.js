@@ -25,6 +25,8 @@
   function createCardFormView(ctx) {
     const frontInput = document.getElementById("frontTextInput");
     const backInput = document.getElementById("backTextInput");
+    const extraSidesList = document.getElementById("extraSidesList");
+    const addExtraSideBtn = document.getElementById("addExtraSideBtn");
     const imageInput = document.getElementById("imageInput");
     const fileInput = document.getElementById("imageFileInput");
     const deckSelect = document.getElementById("deckSelect");
@@ -45,6 +47,13 @@
     const frontUploadImageBtn = document.getElementById("frontUploadImageBtn");
     const imageSideFrontBtn = document.getElementById("imageSideFrontBtn");
     const imageSideBackBtn = document.getElementById("imageSideBackBtn");
+    const textLimits = Karto.CARD_TEXT_LIMITS || {
+      maxExtraSides: 5
+    };
+    let extraSideControls = [];
+    let measureElement = null;
+    let limitTooltip = null;
+    let activeLimitField = null;
 
     function normalizeSide(value) {
       return value === "front" ? "front" : "back";
@@ -52,6 +61,232 @@
 
     function getLanguageCode(lang) {
       return String(lang || "").toUpperCase();
+    }
+
+    function getLimit(kind) {
+      return Karto.getCardTextLimit?.(kind) || {
+        hardChars: kind === "front" ? 120 : 700,
+        softChars: kind === "front" ? 80 : 450,
+        hardLines: kind === "front" ? 2 : 6,
+        softLines: kind === "front" ? 2 : 5
+      };
+    }
+
+    function getMeasureElement() {
+      if (measureElement) {
+        return measureElement;
+      }
+
+      measureElement = document.createElement("div");
+      measureElement.className = "text-line-measure";
+      measureElement.setAttribute("aria-hidden", "true");
+      document.body.appendChild(measureElement);
+      return measureElement;
+    }
+
+    function getLineHeightPx(computedStyle) {
+      const explicitLineHeight = parseFloat(computedStyle.lineHeight);
+      if (Number.isFinite(explicitLineHeight)) {
+        return explicitLineHeight;
+      }
+
+      const fontSize = parseFloat(computedStyle.fontSize);
+      return Number.isFinite(fontSize) ? fontSize * 1.2 : 20;
+    }
+
+    function measureVisualLineCount(field, value) {
+      const text = Karto.normalizeLineBreaks?.(value) || String(value || "").replace(/\r\n?/g, "\n");
+      if (!text) {
+        return 0;
+      }
+
+      const width = Math.max(0, field.clientWidth || field.getBoundingClientRect().width || 0);
+      if (width <= 0) {
+        return Karto.countWrappedLines?.(text, { maxColumns: field === frontInput ? 60 : 86 }) || 1;
+      }
+
+      const computedStyle = root.getComputedStyle(field);
+      const measure = getMeasureElement();
+      const style = measure.style;
+      style.width = `${width}px`;
+      style.boxSizing = computedStyle.boxSizing;
+      style.padding = computedStyle.padding;
+      style.border = computedStyle.border;
+      style.font = computedStyle.font;
+      style.fontSize = computedStyle.fontSize;
+      style.fontFamily = computedStyle.fontFamily;
+      style.fontWeight = computedStyle.fontWeight;
+      style.letterSpacing = computedStyle.letterSpacing;
+      style.lineHeight = computedStyle.lineHeight;
+      style.whiteSpace = "pre-wrap";
+      style.overflowWrap = "anywhere";
+      style.wordBreak = "normal";
+      measure.textContent = text.endsWith("\n") ? `${text}\u200b` : text;
+
+      const lineHeight = getLineHeightPx(computedStyle);
+      const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+      const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
+      const contentHeight = Math.max(0, measure.scrollHeight - paddingTop - paddingBottom);
+      return Math.max(1, Math.round(contentHeight / lineHeight));
+    }
+
+    function createMetrics(field, kind) {
+      const lineCount = measureVisualLineCount(field, field.value);
+      if (typeof Karto.createCardTextMetrics === "function") {
+        return Karto.createCardTextMetrics(field.value, kind, { lineCount });
+      }
+
+      const limit = getLimit(kind);
+      const charCount = field.value.length;
+      return {
+        kind,
+        charCount,
+        lineCount,
+        maxChars: limit.hardChars,
+        maxLines: limit.hardLines,
+        isEmpty: field.value.trim().length === 0,
+        isWarning: charCount >= limit.softChars || lineCount >= limit.softLines,
+        isError: charCount > limit.hardChars || lineCount > limit.hardLines
+      };
+    }
+
+    function formatTextCounter(metrics) {
+      return t("cardForm.textCounter", {
+        lines: metrics.lineCount,
+        maxLines: metrics.maxLines,
+        chars: metrics.charCount,
+        maxChars: metrics.maxChars
+      });
+    }
+
+    function formatLimitMessage(metrics) {
+      const messageKey = metrics.isError ? "cardForm.textLimitError" : "cardForm.textLimitHint";
+      return `${formatTextCounter(metrics)}. ${t(messageKey)}`;
+    }
+
+    function getLimitTooltip() {
+      if (limitTooltip) {
+        return limitTooltip;
+      }
+
+      limitTooltip = createElement("div", {
+        className: "field-limit-tooltip",
+        attrs: {
+          id: "cardTextLimitTooltip",
+          role: "status",
+          "aria-live": "polite"
+        }
+      });
+      document.body.appendChild(limitTooltip);
+      return limitTooltip;
+    }
+
+    function placeLimitTooltip(field) {
+      const tooltip = getLimitTooltip();
+      const rect = field.getBoundingClientRect();
+      const gap = 8;
+      const viewportPadding = 12;
+      const tooltipWidth = tooltip.offsetWidth || 320;
+      const left = Math.min(
+        Math.max(viewportPadding, rect.right - tooltipWidth),
+        Math.max(viewportPadding, root.innerWidth - tooltipWidth - viewportPadding)
+      );
+      const top = Math.min(
+        rect.bottom + gap,
+        Math.max(viewportPadding, root.innerHeight - (tooltip.offsetHeight || 64) - viewportPadding)
+      );
+
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${top}px`;
+    }
+
+    function showLimitTooltip(field, metrics = createMetrics(field, field === frontInput ? "front" : "answer")) {
+      if (!metrics.isWarning && !metrics.isError) {
+        hideLimitTooltip(field);
+        return;
+      }
+
+      const tooltip = getLimitTooltip();
+      tooltip.textContent = formatLimitMessage(metrics);
+      tooltip.classList.toggle("is-error", metrics.isError);
+      tooltip.classList.add("visible");
+      activeLimitField = field;
+      placeLimitTooltip(field);
+    }
+
+    function hideLimitTooltip(field) {
+      if (field && activeLimitField && field !== activeLimitField) {
+        return;
+      }
+
+      if (limitTooltip) {
+        limitTooltip.classList.remove("visible", "is-error");
+      }
+      activeLimitField = null;
+    }
+
+    function refreshActiveLimitTooltip() {
+      if (!activeLimitField) {
+        return;
+      }
+
+      const metrics = createMetrics(activeLimitField, activeLimitField === frontInput ? "front" : "answer");
+      showLimitTooltip(activeLimitField, metrics);
+    }
+
+    function updateLimitState(field, kind) {
+      const metrics = createMetrics(field, kind);
+      field.classList.toggle("is-limit-warning", metrics.isWarning && !metrics.isError);
+      field.classList.toggle("is-limit-error", metrics.isError);
+
+      if (metrics.isWarning || metrics.isError) {
+        const message = formatLimitMessage(metrics);
+        getLimitTooltip();
+        field.title = message;
+        field.setAttribute("aria-describedby", "cardTextLimitTooltip");
+      } else {
+        field.removeAttribute("title");
+        field.removeAttribute("aria-describedby");
+      }
+      if (metrics.isError) {
+        field.setAttribute("aria-invalid", "true");
+      } else {
+        field.removeAttribute("aria-invalid");
+      }
+
+      return metrics;
+    }
+
+    function syncLimitStates() {
+      updateLimitState(frontInput, "front");
+      updateLimitState(backInput, "answer");
+      extraSideControls.forEach((control) => {
+        updateLimitState(control.textarea, "answer");
+      });
+      refreshActiveLimitTooltip();
+    }
+
+    function bindLimitField(field, kind) {
+      field.addEventListener("input", () => {
+        syncLimitStates();
+        if (document.activeElement === field) {
+          showLimitTooltip(field, updateLimitState(field, kind));
+        }
+      });
+      field.addEventListener("focus", () => {
+        showLimitTooltip(field, updateLimitState(field, kind));
+      });
+      field.addEventListener("mouseenter", () => {
+        showLimitTooltip(field, updateLimitState(field, kind));
+      });
+      field.addEventListener("blur", () => {
+        hideLimitTooltip(field);
+      });
+      field.addEventListener("mouseleave", () => {
+        if (document.activeElement !== field) {
+          hideLimitTooltip(field);
+        }
+      });
     }
 
     function resolveDefaultLookupLanguage() {
@@ -210,6 +445,157 @@
       syncSelectedMenuOption(translationMenu, "targetLang", ctx.state.cardForm.translationLang);
     }
 
+    function updateExtraSideAddState() {
+      const isAtLimit = extraSideControls.length >= (textLimits.maxExtraSides || 5);
+      addExtraSideBtn.disabled = isAtLimit;
+      addExtraSideBtn.title = isAtLimit ? t("cardForm.extraSideLimit") : "";
+    }
+
+    function renumberExtraSides() {
+      extraSideControls.forEach((control, index) => {
+        control.label.textContent = t("cardForm.answerSideLabel", { number: index + 1 });
+        control.textarea.placeholder = t("cardForm.answerSidePlaceholder", { number: index + 1 });
+        control.removeBtn.setAttribute("aria-label", t("cardForm.removeAnswerSide", { number: index + 1 }));
+        control.removeBtn.title = t("cardForm.removeAnswerSide", { number: index + 1 });
+      });
+
+      updateExtraSideAddState();
+    }
+
+    function removeExtraSide(sideId) {
+      const control = extraSideControls.find((item) => item.id === sideId);
+      if (!control) {
+        return;
+      }
+
+      control.wrap.remove();
+      extraSideControls = extraSideControls.filter((item) => item.id !== sideId);
+      renumberExtraSides();
+      syncLimitStates();
+    }
+
+    function createExtraSideControl(side = {}) {
+      if (extraSideControls.length >= (textLimits.maxExtraSides || 5)) {
+        return null;
+      }
+
+      let sideId = typeof side.id === "string" && side.id.trim() ? side.id.trim() : createId("side");
+      if (extraSideControls.some((control) => control.id === sideId)) {
+        sideId = createId("side");
+      }
+      const fieldId = `extraSideInput_${extraSideControls.length + 1}_${sideId.replace(/[^a-z0-9_-]/gi, "_")}`;
+      const label = createElement("label", {
+        className: "form-label form-label-with-side",
+        attrs: { for: fieldId },
+        children: [
+          createElement("span", {
+            className: "side-indicator side-indicator-back",
+            attrs: { "aria-hidden": "true" }
+          }),
+          createElement("span")
+        ]
+      });
+      const removeBtn = createElement("button", {
+        className: "icon-btn extra-side-remove-btn",
+        children: [createElement("span", { text: "✕", attrs: { "aria-hidden": "true" } })],
+        attrs: {
+          type: "button"
+        },
+        listeners: {
+          click() {
+            removeExtraSide(sideId);
+          }
+        }
+      });
+      const textarea = createElement("textarea", {
+        className: "form-input form-textarea",
+        value: side.text || "",
+        attrs: {
+          id: fieldId,
+          "data-extra-side-input": sideId
+        },
+        listeners: {
+          keydown(event) {
+            if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+              saveCard();
+            }
+          }
+        }
+      });
+      bindLimitField(textarea, "answer");
+      const wrap = createElement("div", {
+        className: "extra-side-item",
+        dataset: { sideId },
+        children: [
+          createElement("div", {
+            className: "form-label-row",
+            children: [
+              label,
+              removeBtn
+            ]
+          }),
+          textarea
+        ]
+      });
+
+      extraSidesList.appendChild(wrap);
+      const control = { id: sideId, wrap, label: label.querySelector("span:last-child"), textarea, removeBtn };
+      extraSideControls.push(control);
+      renumberExtraSides();
+      syncLimitStates();
+      return control;
+    }
+
+    function renderExtraSides(sides = []) {
+      clearElement(extraSidesList);
+      extraSideControls = [];
+      (Array.isArray(sides) ? sides : []).slice(0, textLimits.maxExtraSides || 5).forEach((side) => {
+        createExtraSideControl(side);
+      });
+      renumberExtraSides();
+      syncLimitStates();
+    }
+
+    function readExtraSidesFromForm() {
+      return extraSideControls.map((control) => ({
+        id: control.id,
+        text: control.textarea.value.trim()
+      }));
+    }
+
+    function validateTextLimits() {
+      const fields = [
+        { field: frontInput, kind: "front" },
+        { field: backInput, kind: "answer" },
+        ...extraSideControls.map((control) => ({
+          field: control.textarea,
+          kind: "answer"
+        }))
+      ];
+      const invalidEntry = fields
+        .map((entry) => ({
+          ...entry,
+          metrics: updateLimitState(entry.field, entry.kind)
+        }))
+        .find((entry) => entry.metrics.isEmpty || entry.metrics.isError);
+
+      if (!invalidEntry) {
+        return true;
+      }
+
+      invalidEntry.field.focus();
+      if (invalidEntry.metrics.isError) {
+        showLimitTooltip(invalidEntry.field, invalidEntry.metrics);
+      }
+      if (invalidEntry.metrics.isEmpty) {
+        ctx.toast.error(t("alerts.requiredFields"));
+      } else {
+        ctx.toast.error(t("alerts.textLimitExceeded"));
+      }
+
+      return false;
+    }
+
     function setMenuOpen(control, menu, button, isOpen) {
       control.classList.toggle("is-open", isOpen);
       menu.hidden = !isOpen;
@@ -258,6 +644,7 @@
       clearElement(imageResults);
       clearImagePreview();
       fileInput.value = "";
+      hideLimitTooltip();
       closeMenus();
 
       if (deckId !== null && cardId !== null) {
@@ -266,6 +653,7 @@
 
         frontInput.value = card?.frontText || "";
         backInput.value = card?.backText || "";
+        renderExtraSides(card?.extraSides || []);
         imageInput.value = card?.image || card?.imageStudy || "";
         ctx.state.cardForm.imageThumb = card?.imageThumb || deriveFormImageThumb(card?.image || "");
         ctx.state.cardForm.imageStudy = card?.imageStudy || deriveFormStudyImage(card?.image || "");
@@ -274,6 +662,7 @@
       } else {
         frontInput.value = "";
         backInput.value = "";
+        renderExtraSides([]);
         imageInput.value = "";
         ctx.state.cardForm.imageThumb = "";
         ctx.state.cardForm.imageStudy = "";
@@ -290,11 +679,14 @@
       renderLookupSelections();
       ctx.router.goTo("createCardScreen", ctx.navTargetForScreen(ctx.state.cardForm.returnScreen));
       closeMenus();
+      syncLimitStates();
+      root.requestAnimationFrame(syncLimitStates);
       frontInput.focus();
     }
 
     function navigateBack() {
       const returnScreen = ctx.state.cardForm.returnScreen;
+      hideLimitTooltip();
 
       if (returnScreen === "editDeckScreen") {
         ctx.deckEditorView.render();
@@ -310,6 +702,7 @@
     async function saveCard() {
       const frontText = frontInput.value.trim();
       const backText = backInput.value.trim();
+      const extraSides = readExtraSidesFromForm();
       const image = imageInput.value.trim();
       const imageThumb = image ? ctx.state.cardForm.imageThumb || deriveFormImageThumb(image) : "";
       const imageStudy = image ? ctx.state.cardForm.imageStudy || deriveFormStudyImage(image) : "";
@@ -317,6 +710,10 @@
 
       if (!frontText || !backText) {
         ctx.toast.error(t("alerts.requiredFields"));
+        return;
+      }
+
+      if (!validateTextLimits()) {
         return;
       }
 
@@ -339,7 +736,7 @@
       const editingDeck = ctx.getDeckById(ctx.state.cardForm.editDeckId);
       const editingCard = editingDeck?.cards.find((card) => card.id === ctx.state.cardForm.editCardId);
 
-      const savedCard = createCard({ frontText, backText, image, imageThumb, imageStudy, imageSide }, editingCard?.id || null);
+      const savedCard = createCard({ frontText, backText, extraSides, image, imageThumb, imageStudy, imageSide }, editingCard?.id || null);
       if (!savedCard) {
         ctx.toast.error(t("alerts.requiredFields"));
         return;
@@ -546,6 +943,14 @@
 
     document.getElementById("closeCardFormBtn").addEventListener("click", navigateBack);
     document.getElementById("saveCardBtn").addEventListener("click", saveCard);
+    addExtraSideBtn.addEventListener("click", () => {
+      const control = createExtraSideControl();
+      if (control) {
+        control.textarea.focus();
+      }
+    });
+    bindLimitField(frontInput, "front");
+    bindLimitField(backInput, "answer");
     definitionBtn.addEventListener("click", (event) => {
       fetchDefinition(event.currentTarget);
     });
@@ -669,11 +1074,14 @@
         updateCardFormTitle();
         syncImageSideButtons();
         renderLookupSelections();
+        renumberExtraSides();
         if (imageInput.value.trim()) {
           showImagePreview(imageInput.value.trim());
         } else {
           clearImagePreview();
         }
+        syncLimitStates();
+        root.requestAnimationFrame(syncLimitStates);
         closeMenus();
       }
     };

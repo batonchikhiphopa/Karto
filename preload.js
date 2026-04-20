@@ -34,6 +34,9 @@ contextBridge.exposeInMainWorld("api", {
   loadAppDataSync() {
     return callSync("karto-data:load-app-data-sync");
   },
+  loadAppData() {
+    return ipcRenderer.invoke("karto-data:load-app-data");
+  },
   loadAppShellData() {
     return ipcRenderer.invoke("karto-data:load-app-shell-data");
   },

@@ -23,6 +23,7 @@ async function launchKarto(options = {}) {
   const page = await electronApp.firstWindow();
   await page.waitForSelector("#appMain");
   if (options.waitForReady !== false) {
+    await page.waitForFunction(() => window.__kartoStartup?.ready === true);
     await page.waitForFunction(() => !!window.__kartoE2E);
     if (options.clearData !== false) {
       await page.evaluate(() => window.__kartoE2E.clearAllData());
@@ -44,6 +45,12 @@ async function closeKarto(electronApp, userDataDir, options = {}) {
       force: true
     });
   }
+}
+
+async function hasVisibleKartoWindow(electronApp) {
+  return electronApp.evaluate(({ BrowserWindow }) => {
+    return BrowserWindow.getAllWindows().some((window) => window.isVisible());
+  });
 }
 
 async function createDeck(page, name) {
@@ -326,7 +333,131 @@ test("desktop study mode: first image card can use thumbnail without blocking", 
   }
 });
 
-test("desktop startup preselects study preview cards before deck click", async () => {
+test("desktop cards can add and study additional sides", async () => {
+  const { electronApp, page, userDataDir } = await launchKarto();
+
+  try {
+    await createDeck(page, "Extra Sides");
+    await page.locator("#editDeckCreateCardBtn").click();
+    await expect(page.locator("#createCardScreen")).toHaveClass(/is-active/);
+    await expect(page.locator("#addExtraSideBtn")).toContainText(/Add additional side|Добавить дополнительную сторону/);
+    await expect(page.locator(".field-counter")).toHaveCount(0);
+    await expect(page.locator(".field-limit-row")).toHaveCount(0);
+    await page.locator("#frontTextInput").fill("multi side front");
+    await page.locator("#backTextInput").fill("first additional side");
+    await page.locator("#addExtraSideBtn").click();
+    await page.locator("[data-extra-side-input]").fill("second additional side");
+    await page.locator("#saveCardBtn").click();
+    await expect(page.locator("#editDeckScreen")).toHaveClass(/is-active/);
+
+    const exportedPayload = await page.evaluate(() => window.__kartoE2E.exportLibraryPayload());
+    expect(exportedPayload.decks[0].cards[0].extraSides).toEqual([
+      expect.objectContaining({ text: "second additional side" })
+    ]);
+
+    await page.locator("#startDeckStudyBtn").click();
+    await expect(page.locator("#studyScreen")).toHaveClass(/is-active/);
+    const studyCard = page.locator("#studyCard");
+    await expect(studyCard).toContainText("multi side front");
+    await studyCard.click();
+    await expect(studyCard).toContainText("first additional side");
+    await expect(page.locator(".study-answer-progress")).toContainText("1 / 2");
+    await studyCard.click();
+    await expect(studyCard).toContainText("second additional side");
+    await expect(page.locator(".study-answer-progress")).toContainText("2 / 2");
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(async () => {
+      const payload = await page.evaluate(() => window.__kartoE2E.snapshot());
+      return Object.values(payload.studyProgress)[0]?.lastResult || null;
+    }).toBe("correct");
+  } finally {
+    await closeKarto(electronApp, userDataDir);
+  }
+});
+
+test("desktop card form shows contextual text limit tooltip and blocks hard limit", async () => {
+  const { electronApp, page, userDataDir } = await launchKarto();
+
+  try {
+    await createDeck(page, "Limit Tooltips");
+    await page.locator("#editDeckCreateCardBtn").click();
+    await expect(page.locator("#createCardScreen")).toHaveClass(/is-active/);
+    await expect(page.locator(".field-counter")).toHaveCount(0);
+    await expect(page.locator(".field-limit-row")).toHaveCount(0);
+
+    await page.locator("#frontTextInput").fill("a".repeat(81));
+    await expect(page.locator("#frontTextInput")).toHaveClass(/is-limit-warning/);
+    await expect(page.locator(".field-limit-tooltip.visible")).toContainText(/81 \/ 120 (chars|символов)/);
+
+    await page.locator("#frontTextInput").fill("a".repeat(121));
+    await page.locator("#backTextInput").fill("valid answer");
+    await expect(page.locator("#frontTextInput")).toHaveClass(/is-limit-error/);
+    await expect(page.locator("#frontTextInput")).toHaveAttribute("aria-invalid", "true");
+    await page.locator("#saveCardBtn").click();
+    await expect(page.locator("#createCardScreen")).toHaveClass(/is-active/);
+  } finally {
+    await closeKarto(electronApp, userDataDir);
+  }
+});
+
+test("desktop study keeps short front text at original scale without scrollbar", async () => {
+  const { electronApp, page, userDataDir } = await launchKarto();
+
+  try {
+    await createDeck(page, "Study Scale");
+    await addCard(page, "allowed", "permitted");
+
+    await page.locator("#startDeckStudyBtn").click();
+    await expect(page.locator("#studyScreen")).toHaveClass(/is-active/);
+    await expect(page.locator(".study-front-text")).toContainText("allowed");
+    await expect(page.locator(".study-answer-progress")).toHaveCount(0);
+
+    const frontMetrics = await page.locator(".study-front-text").evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      return {
+        className: element.className,
+        fontSize: Number.parseFloat(style.fontSize),
+        overflowY: style.overflowY
+      };
+    });
+
+    expect(frontMetrics.className).not.toContain("is-scrollable");
+    expect(frontMetrics.overflowY).not.toBe("auto");
+    expect(frontMetrics.fontSize).toBeGreaterThan(52);
+  } finally {
+    await closeKarto(electronApp, userDataDir);
+  }
+});
+
+test("desktop startup keeps window hidden until renderer is ready", async () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "karto-e2e-hidden-startup-"));
+  let electronApp = null;
+  let page;
+
+  try {
+    ({ electronApp, page } = await launchKarto({
+      userDataDir,
+      clearData: false,
+      waitForReady: false,
+      env: {
+        KARTO_E2E_STARTUP_PREWARM_DELAY_MS: "1200"
+      }
+    }));
+
+    await expect(page.locator("#bootScreen")).toBeVisible();
+    expect(await hasVisibleKartoWindow(electronApp)).toBe(false);
+
+    await page.waitForFunction(() => window.__kartoStartup?.ready === true);
+    await expect(page.locator("#bootScreen")).toBeHidden();
+    await expect.poll(() => hasVisibleKartoWindow(electronApp)).toBe(true);
+  } finally {
+    if (electronApp) {
+      await closeKarto(electronApp, userDataDir);
+    }
+  }
+});
+
+test("desktop startup fully loads study cards before deck click", async () => {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "karto-e2e-preselect-"));
   let electronApp = null;
   let page;
@@ -370,23 +501,24 @@ test("desktop startup preselects study preview cards before deck click", async (
     await page.waitForFunction(() => !!window.__kartoE2E);
     await expect(page.locator("#bootScreen")).toBeHidden();
 
-    const previewCards = await page.evaluate(() => {
+    const loadedDeck = await page.evaluate(() => {
       const snapshot = window.__kartoE2E.snapshot();
-      return snapshot.decks.decks.find((deck) => deck.id === "deck_preselect").cards;
+      return snapshot.decks.decks.find((deck) => deck.id === "deck_preselect");
     });
 
-    expect(previewCards).toHaveLength(5);
-    expect(previewCards.every((card) => card.image === "" && card.imageStudy === "" && card.imageThumb)).toBe(true);
+    expect(loadedDeck.cardsHydrated).toBe(true);
+    expect(loadedDeck.cards).toHaveLength(6);
+    expect(loadedDeck.cards.every((card) => card.image && card.imageThumb)).toBe(true);
 
     await page.locator("[data-action='study'][data-deck-id='deck_preselect']").click();
     await expect(page.locator("#studyScreen")).toHaveClass(/is-active/);
 
     const studyCard = page.locator("#studyCard");
-    for (let index = 0; index < previewCards.length; index += 1) {
-      await expect(studyCard).toContainText(previewCards[index].frontText);
-      await expect(page.locator(".study-card-img")).toHaveAttribute("src", previewCards[index].imageThumb);
+    for (let index = 0; index < loadedDeck.cards.length; index += 1) {
+      await expect(studyCard).toContainText(loadedDeck.cards[index].frontText);
+      await expect(page.locator(".study-card-img")).toHaveAttribute("src", loadedDeck.cards[index].imageThumb);
 
-      if (index < previewCards.length - 1) {
+      if (index < loadedDeck.cards.length - 1) {
         await page.keyboard.press("ArrowRight");
       }
     }

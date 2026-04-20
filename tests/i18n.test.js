@@ -65,12 +65,44 @@ function testNewUiStringsAreLocalized() {
   assert.equal(t("settings.saveChanges"), "Сохранить изменения");
   assert.equal(t("sidebar.quitApp"), "Выйти");
   assert.equal(t("alerts.settingsSaved"), "Настройки сохранены.");
+  assert.equal(t("cardForm.addAnswerSide"), "Добавить дополнительную сторону");
+  assert.equal(t("cardForm.answerSideLabel", { number: 2 }), "Дополнительная сторона 2");
+  assert.equal(t("alerts.textLimitExceeded"), "Сократи текст или перенеси часть на дополнительную сторону.");
   assert.equal(t("actions.moveCard"), "Переместить карточку");
   assert.equal(t("editDeck.moveConfirm"), "Переместить");
   assert.equal(
     t("alerts.cardMoveSkipped", { deckName: "Deutsch" }),
     "Карточка не перемещена. В колоде \"Deutsch\" уже есть дубликат."
   );
+}
+
+function testAdditionalSideTerminology() {
+  ["en", "ru", "de"].forEach((lang) => {
+    setLanguage(lang, {
+      persist: false,
+      refresh: false,
+      storage: memoryStorage
+    });
+
+    const labels = [
+      t("cardForm.addAnswerSide"),
+      t("cardForm.answerSideLabel", { number: 2 }),
+      t("cardForm.answerSidePlaceholder", { number: 2 }),
+      t("cardForm.removeAnswerSide", { number: 2 }),
+      t("cardForm.extraSideLimit"),
+      t("cardForm.textLimitHint"),
+      t("alerts.textLimitExceeded")
+    ].join(" ");
+
+    const forbiddenTerms = new RegExp([
+      "answer\\s+side",
+      "сторон[ауы]? ответа",
+      "antwort" + "seite",
+      "antwort" + "seiten"
+    ].join("|"), "i");
+
+    assert.equal(forbiddenTerms.test(labels), false);
+  });
 }
 
 function testResolveInitialLanguageCanBypassStorage() {
@@ -101,6 +133,7 @@ testTranslatePluralUsesLanguageRules();
 testInterpolationReplacesParams();
 testFallbackToEnglishWorks();
 testNewUiStringsAreLocalized();
+testAdditionalSideTerminology();
 testResolveInitialLanguageCanBypassStorage();
 testSetLanguageWithPersistFalseDoesNotWriteStorage();
 

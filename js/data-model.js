@@ -7,7 +7,7 @@
 
   Object.assign(root, api);
 })(typeof window !== "undefined" ? window : globalThis, function(root) {
-  const DATA_SCHEMA_VERSION = 2;
+  const DATA_SCHEMA_VERSION = 3;
   let idCounter = 0;
 
   function createId(prefix = "id") {
@@ -26,6 +26,31 @@
 
   function normalizeText(value) {
     return typeof value === "string" ? value.trim() : "";
+  }
+
+  function normalizeFrontText(value) {
+    return normalizeText(value).replace(/\s*\r?\n\s*/g, " ").replace(/\s+/g, " ");
+  }
+
+  function normalizeExtraSides(value) {
+    const rawSides = Array.isArray(value) ? value : [];
+
+    return rawSides
+      .map((side) => {
+        const text = isPlainObject(side)
+          ? normalizeText(side.text)
+          : normalizeText(side);
+
+        if (!text) {
+          return null;
+        }
+
+        return {
+          id: isPlainObject(side) && hasStableId(side.id) ? side.id.trim() : createId("side"),
+          text
+        };
+      })
+      .filter(Boolean);
   }
 
   function normalizeImageSide(value) {
@@ -55,8 +80,9 @@
   function normalizeCard(rawCard) {
     if (!isPlainObject(rawCard)) return null;
 
-    const frontText = normalizeText(rawCard.frontText);
+    const frontText = normalizeFrontText(rawCard.frontText);
     const backText = normalizeText(rawCard.backText);
+    const extraSides = normalizeExtraSides(rawCard.extraSides);
     const image = normalizeText(rawCard.image);
     const imageThumb = normalizeText(rawCard.imageThumb);
     const imageStudy = normalizeText(rawCard.imageStudy);
@@ -71,6 +97,7 @@
       id: hasStableId(rawCard.id) ? rawCard.id.trim() : createId("card"),
       frontText,
       backText,
+      extraSides,
       image,
       imageThumb: hasImage ? imageThumb : "",
       imageStudy: hasImage ? imageStudy : "",
@@ -81,7 +108,11 @@
   }
 
   function cardFingerprint(card) {
-    return [card.frontText, card.backText, card.image, card.imageSide]
+    const extraSidePart = normalizeExtraSides(card.extraSides)
+      .map((side) => side.text)
+      .join("\u241e");
+
+    return [card.frontText, card.backText, extraSidePart, card.image, card.imageSide]
       .map((value) => normalizeText(value).toLowerCase())
       .join("\u241f");
   }
@@ -226,6 +257,10 @@
       id: options.freshId ? createId("card") : normalized.id,
       frontText: normalized.frontText,
       backText: normalized.backText,
+      extraSides: normalized.extraSides.map((side) => ({
+        id: options.freshId ? createId("side") : side.id,
+        text: side.text
+      })),
       image: normalized.image,
       imageThumb: normalized.imageThumb,
       imageStudy: normalized.imageStudy,
@@ -276,6 +311,7 @@
       id: existingId,
       frontText: fields.frontText,
       backText: fields.backText,
+      extraSides: fields.extraSides,
       image: fields.image,
       imageThumb: fields.imageThumb,
       imageStudy: fields.imageStudy,
@@ -649,6 +685,7 @@
     deckFingerprint,
     getDeckCardCount,
     mergeDecks,
+    normalizeExtraSides,
     moveCardsBetweenDecks,
     normalizeCard,
     normalizeDeck,

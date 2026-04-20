@@ -45,6 +45,7 @@ const STARTUP_PHASES = Object.freeze({
   FAILED: "failed"
 });
 const STARTUP_RENDERER_SCRIPT = buildRendererVerificationScript();
+const STARTUP_RENDERER_POLL_INTERVAL_MS = 100;
 
 let server = null;
 let baseUrl = "";
@@ -497,14 +498,34 @@ function waitWithinDeadline(promise, deadlineAt) {
   });
 }
 
-function stopPendingNavigation(window) {
+function wait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function getActiveWebContents(window) {
   if (!window || window.isDestroyed()) {
+    return null;
+  }
+
+  try {
+    const contents = window.webContents;
+    return contents && !contents.isDestroyed() ? contents : null;
+  } catch {
+    return null;
+  }
+}
+
+function stopPendingNavigation(window) {
+  const webContents = getActiveWebContents(window);
+  if (!webContents) {
     return;
   }
 
   try {
-    if (window.webContents.isLoading()) {
-      window.webContents.stop();
+    if (webContents.isLoading()) {
+      webContents.stop();
     }
   } catch {
     // The retry path should not fail just because a timed-out load cannot be stopped.
@@ -534,10 +555,20 @@ function discardStartupWindow(window) {
 }
 
 function createMainFrameAttemptWatcher(window, action, attemptLabel) {
+  const webContents = getActiveWebContents(window);
   let cleanup = () => {};
+  let cancel = () => {};
 
   const promise = new Promise((resolve) => {
     let settled = false;
+
+    if (!webContents) {
+      resolve({
+        kind: "navigation_error",
+        error: new Error("Startup window was destroyed before navigation began.")
+      });
+      return;
+    }
 
     const finish = (outcome) => {
       if (settled) {
@@ -547,6 +578,15 @@ function createMainFrameAttemptWatcher(window, action, attemptLabel) {
       settled = true;
       cleanup();
       resolve(outcome);
+    };
+
+    cancel = () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
     };
 
     const handleDidFrameFinishLoad = (_event, isMainFrame) => {
@@ -572,12 +612,16 @@ function createMainFrameAttemptWatcher(window, action, attemptLabel) {
     };
 
     cleanup = () => {
-      window.webContents.removeListener("did-frame-finish-load", handleDidFrameFinishLoad);
-      window.webContents.removeListener("did-fail-load", handleDidFailLoad);
+      if (!webContents || webContents.isDestroyed()) {
+        return;
+      }
+
+      webContents.removeListener("did-frame-finish-load", handleDidFrameFinishLoad);
+      webContents.removeListener("did-fail-load", handleDidFailLoad);
     };
 
-    window.webContents.on("did-frame-finish-load", handleDidFrameFinishLoad);
-    window.webContents.on("did-fail-load", handleDidFailLoad);
+    webContents.on("did-frame-finish-load", handleDidFrameFinishLoad);
+    webContents.on("did-fail-load", handleDidFailLoad);
 
     recordStartupCheckpoint(`${attemptLabel}_load_start`);
 
@@ -600,9 +644,67 @@ function createMainFrameAttemptWatcher(window, action, attemptLabel) {
   });
 
   return {
+    cancel,
     cleanup,
     promise
   };
+}
+
+async function runRendererVerificationPolling(window, deadlineAt) {
+  let lastRendererResult = null;
+
+  while (Date.now() < deadlineAt) {
+    const webContents = getActiveWebContents(window);
+    if (!webContents) {
+      return evaluateVerificationResult({
+        rendererError: "Startup window was destroyed before renderer verification completed."
+      });
+    }
+
+    let scriptPromise;
+    try {
+      scriptPromise = webContents.executeJavaScript(STARTUP_RENDERER_SCRIPT);
+    } catch (error) {
+      return evaluateVerificationResult({
+        rendererError: formatErrorDetails(error)
+      });
+    }
+
+    const rendererOutcome = await waitWithinDeadline(scriptPromise, deadlineAt);
+
+    if (rendererOutcome.timedOut) {
+      return evaluateVerificationResult({
+        ...(lastRendererResult || {}),
+        timeout: true
+      });
+    }
+
+    if (rendererOutcome.error) {
+      return evaluateVerificationResult({
+        ...(lastRendererResult || {}),
+        rendererError: formatErrorDetails(rendererOutcome.error)
+      });
+    }
+
+    lastRendererResult = rendererOutcome.value || {};
+    const evaluation = evaluateVerificationResult(lastRendererResult);
+
+    if (evaluation.ok || evaluation.reason !== "not_ready") {
+      return evaluation;
+    }
+
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
+
+    await wait(Math.min(STARTUP_RENDERER_POLL_INTERVAL_MS, remainingMs));
+  }
+
+  return evaluateVerificationResult({
+    ...(lastRendererResult || {}),
+    timeout: true
+  });
 }
 
 async function runVerificationAttempt(window, attemptNumber, action, url) {
@@ -625,11 +727,11 @@ async function runVerificationAttempt(window, attemptNumber, action, url) {
     const navigationOutcome = await waitWithinDeadline(watcher.promise, deadlineAt);
 
     if (navigationOutcome.timedOut) {
-      watcher.cleanup();
+      watcher.cancel();
       stopPendingNavigation(window);
       evaluation = evaluateVerificationResult({ timeout: true });
     } else if (navigationOutcome.error) {
-      watcher.cleanup();
+      watcher.cancel();
       evaluation = evaluateVerificationResult({
         navigationError: formatErrorDetails(navigationOutcome.error)
       });
@@ -638,20 +740,7 @@ async function runVerificationAttempt(window, attemptNumber, action, url) {
         navigationError: formatErrorDetails(navigationOutcome.value.error)
       });
     } else {
-      const rendererOutcome = await waitWithinDeadline(
-        window.webContents.executeJavaScript(STARTUP_RENDERER_SCRIPT),
-        deadlineAt
-      );
-
-      if (rendererOutcome.timedOut) {
-        evaluation = evaluateVerificationResult({ timeout: true });
-      } else if (rendererOutcome.error) {
-        evaluation = evaluateVerificationResult({
-          rendererError: formatErrorDetails(rendererOutcome.error)
-        });
-      } else {
-        evaluation = evaluateVerificationResult(rendererOutcome.value);
-      }
+      evaluation = await runRendererVerificationPolling(window, deadlineAt);
     }
 
     recordStartupCheckpoint(`${attemptLabel}_done`);
@@ -688,6 +777,7 @@ function createStartupVerificationError(evaluations, url) {
       `Attempt ${index + 1}: ${evaluation.reason || "unknown"} ` +
       `(shell=${evaluation.hasAppShell ? 1 : 0}, ` +
       `main=${evaluation.hasAppMain ? 1 : 0}, ` +
+      `ready=${evaluation.hasRendererReady ? 1 : 0}, ` +
       `raw_bootstrap=${evaluation.hasRawBootstrapText ? 1 : 0}, ` +
       `preview="${evaluation.preview}")`
     );
@@ -698,6 +788,10 @@ function createStartupVerificationError(evaluations, url) {
 
     if (evaluation.rendererError) {
       lines.push(`renderer_error: ${evaluation.rendererError}`);
+    }
+
+    if (evaluation.rendererStartupError) {
+      lines.push(`renderer_startup_error: ${evaluation.rendererStartupError}`);
     }
   });
 

@@ -115,10 +115,81 @@
   border-color: var(--border-strong);
 }
 
+.form-input.is-limit-warning {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+}
+
+.form-input.is-limit-error {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 20%, transparent);
+}
+
 .form-textarea {
   min-height: 140px;
   resize: vertical;
   line-height: 1.5;
+}
+
+.extra-sides-section,
+.extra-sides-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.extra-side-item {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.extra-side-remove-btn {
+  flex-shrink: 0;
+}
+
+.extra-side-add-btn {
+  align-self: flex-end;
+}
+
+.field-limit-tooltip {
+  position: fixed;
+  z-index: 80;
+  max-width: min(360px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--border));
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.35;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.field-limit-tooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.field-limit-tooltip.is-error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.text-line-measure {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
+  contain: layout style;
 }
 
 .form-file-input {

@@ -12,7 +12,7 @@ const {
 } = require("../js/startup-verification.js");
 
 function testStartupTimeoutAllowsColdDesktopLaunch() {
-  assert.equal(STARTUP_VERIFY_TIMEOUT_MS >= 10000, true);
+  assert.equal(STARTUP_VERIFY_TIMEOUT_MS, 45000);
 }
 
 function testNormalizeBodyText() {
@@ -31,6 +31,7 @@ function testHealthyEvaluation() {
   const evaluation = evaluateVerificationResult({
     hasAppShell: true,
     hasAppMain: true,
+    hasRendererReady: true,
     normalizedBodyText: "Karto desktop workspace is ready for use right now.",
     hasRawBootstrapText: false
   });
@@ -43,6 +44,7 @@ function testBodyTooShortEvaluation() {
   const evaluation = evaluateVerificationResult({
     hasAppShell: true,
     hasAppMain: true,
+    hasRendererReady: true,
     normalizedBodyText: "too short",
     hasRawBootstrapText: false
   });
@@ -58,6 +60,7 @@ function testReasonPriority() {
     rendererError: "renderer failed",
     hasAppShell: false,
     hasAppMain: false,
+    hasRendererReady: false,
     normalizedBodyText: "Karto (function() { try { boot(); } })();"
   });
 
@@ -68,6 +71,7 @@ function testRendererResultInterpretation() {
   const evaluation = evaluateVerificationResult({
     hasAppShell: true,
     hasAppMain: false,
+    hasRendererReady: false,
     normalizedBodyText: "This renderer result is long enough to validate body length safely.",
     hasRawBootstrapText: false,
     preview: "This renderer result is long enough to validate body length safely."
@@ -76,6 +80,35 @@ function testRendererResultInterpretation() {
   assert.equal(evaluation.ok, false);
   assert.equal(evaluation.reason, "missing_main");
   assert.equal(evaluation.preview.includes("renderer result"), true);
+}
+
+function testRendererNotReadyEvaluation() {
+  const evaluation = evaluateVerificationResult({
+    hasAppShell: true,
+    hasAppMain: true,
+    hasRendererReady: false,
+    normalizedBodyText: "Karto is still loading the complete desktop library.",
+    hasRawBootstrapText: false
+  });
+
+  assert.equal(evaluation.ok, false);
+  assert.equal(evaluation.reason, "not_ready");
+  assert.equal(evaluation.hasRendererReady, false);
+}
+
+function testRendererStartupErrorEvaluation() {
+  const evaluation = evaluateVerificationResult({
+    hasAppShell: true,
+    hasAppMain: true,
+    hasRendererReady: false,
+    rendererStartupError: "database failed",
+    normalizedBodyText: "Karto could not finish loading.",
+    hasRawBootstrapText: false
+  });
+
+  assert.equal(evaluation.ok, false);
+  assert.equal(evaluation.reason, "renderer_startup_error");
+  assert.equal(evaluation.rendererStartupError, "database failed");
 }
 
 function testPreviewTruncation() {
@@ -97,6 +130,7 @@ function testFailedAttemptLogFormat() {
   const evaluation = evaluateVerificationResult({
     hasAppShell: true,
     hasAppMain: true,
+    hasRendererReady: true,
     normalizedBodyText: "Karto (function() { try { boot(); } })();",
     hasRawBootstrapText: true
   });
@@ -109,7 +143,29 @@ function testFailedAttemptLogFormat() {
 
   assert.match(logLine, /^\[karto\]\[startup-check\] attempt=1 reason=raw_bootstrap /);
   assert.equal(logLine.includes("\n"), false);
+  assert.equal(logLine.includes("ready=1"), true);
   assert.equal(logLine.includes("raw_bootstrap=1"), true);
+}
+
+function testFailedAttemptLogIncludesStartupError() {
+  const evaluation = evaluateVerificationResult({
+    hasAppShell: true,
+    hasAppMain: true,
+    hasRendererReady: false,
+    rendererStartupError: "line 1\n\"broken\"",
+    normalizedBodyText: "Karto could not finish loading.",
+    hasRawBootstrapText: false
+  });
+  const logLine = formatFailedAttemptLog({
+    attempt: 2,
+    elapsedMs: 250,
+    url: "http://127.0.0.1:3000/",
+    evaluation
+  });
+
+  assert.match(logLine, /reason=renderer_startup_error /);
+  assert.equal(logLine.includes("ready=0"), true);
+  assert.equal(logLine.includes("startup_error=\"line 1 \\\"broken\\\"\""), true);
 }
 
 testStartupTimeoutAllowsColdDesktopLaunch();
@@ -119,8 +175,11 @@ testHealthyEvaluation();
 testBodyTooShortEvaluation();
 testReasonPriority();
 testRendererResultInterpretation();
+testRendererNotReadyEvaluation();
+testRendererStartupErrorEvaluation();
 testPreviewTruncation();
 testPreviewEscaping();
 testFailedAttemptLogFormat();
+testFailedAttemptLogIncludesStartupError();
 
 console.log("startup verification tests passed");

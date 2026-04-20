@@ -18,22 +18,22 @@ function createAppData(overrides = {}) {
   };
 }
 
-function createDesktopApi(initialData = {}) {
+function createDesktopApi(initialData = {}, options = {}) {
   let appData = createAppData(initialData);
   const calls = {
     answers: [],
+    asyncLoads: 0,
     savedDecks: [],
     sessions: [],
     settings: [],
+    syncLoads: 0,
     snapshots: []
   };
 
   const api = {
     loadAppDataSync() {
+      calls.syncLoads += 1;
       return clone(appData);
-    },
-    loadAppShellData() {
-      return Promise.resolve(clone(appData));
     },
     loadDeckCards(deckId) {
       return clone(appData.decks.find((deck) => deck.id === deckId) || null);
@@ -92,6 +92,15 @@ function createDesktopApi(initialData = {}) {
     }
   };
 
+  if (options.includeAsyncLoad !== false) {
+    api.loadAppData = () => {
+      calls.asyncLoads += 1;
+      return Promise.resolve(clone(appData));
+    };
+  }
+
+  api.loadAppShellData = () => Promise.resolve(clone(appData));
+
   return { api, calls };
 }
 
@@ -120,7 +129,7 @@ function withMockedAppStateRuntime(options, run) {
 
   const desktop = options.api
     ? { api: options.api, calls: options.calls || {} }
-    : createDesktopApi(options.appData || {});
+    : createDesktopApi(options.appData || {}, options.desktopApiOptions || {});
 
   globalThis.Karto = {};
   globalThis.api = desktop.api;
@@ -154,12 +163,7 @@ function withMockedAppStateRuntime(options, run) {
   delete require.cache[modulePath];
   require(modulePath);
 
-  try {
-    run({
-      calls: desktop.calls,
-      createAppState: globalThis.Karto.createAppState
-    });
-  } finally {
+  const restore = () => {
     keys.forEach((key) => {
       if (previousValues.get(key) === undefined) {
         delete globalThis[key];
@@ -168,6 +172,26 @@ function withMockedAppStateRuntime(options, run) {
 
       globalThis[key] = previousValues.get(key);
     });
+  };
+
+  let shouldRestore = true;
+
+  try {
+    const result = run({
+      calls: desktop.calls,
+      createAppState: globalThis.Karto.createAppState
+    });
+
+    if (result && typeof result.then === "function") {
+      shouldRestore = false;
+      return result.finally(restore);
+    }
+
+    return result;
+  } finally {
+    if (shouldRestore) {
+      restore();
+    }
   }
 }
 
@@ -358,6 +382,47 @@ function testDesktopLoadReadsRepositoryDataDirectly() {
   });
 }
 
+async function testDesktopLoadFullDataPrefersAsyncRepositoryData() {
+  await withMockedAppStateRuntime({
+    appData: {
+      decks: [{ id: "deck_async", name: "Async Deck", cards: [] }],
+      languagePreference: "de",
+      themePreference: "dark",
+      homeGridColumns: "4"
+    }
+  }, async ({ createAppState, calls }) => {
+    const store = createAppState();
+    await store.loadFullData();
+
+    assert.equal(calls.asyncLoads, 1);
+    assert.equal(calls.syncLoads, 0);
+    assert.equal(store.state.languagePreference, "de");
+    assert.equal(store.state.themePreference, "dark");
+    assert.equal(store.state.homeGridColumns, "4");
+    assert.deepEqual(store.state.decks, [{ id: "deck_async", name: "Async Deck", cards: [] }]);
+  });
+}
+
+async function testDesktopLoadFullDataFallsBackToSyncRepositoryData() {
+  await withMockedAppStateRuntime({
+    appData: {
+      decks: [{ id: "deck_sync", name: "Sync Deck", cards: [] }],
+      languagePreference: "ru"
+    },
+    desktopApiOptions: {
+      includeAsyncLoad: false
+    }
+  }, async ({ createAppState, calls }) => {
+    const store = createAppState();
+    await store.loadFullData();
+
+    assert.equal(calls.asyncLoads, 0);
+    assert.equal(calls.syncLoads, 1);
+    assert.equal(store.state.languagePreference, "ru");
+    assert.deepEqual(store.state.decks, [{ id: "deck_sync", name: "Sync Deck", cards: [] }]);
+  });
+}
+
 function testDesktopPersistenceDelegatesSnapshotAndLanguageSaves() {
   withMockedAppStateRuntime({
     appData: {
@@ -382,12 +447,19 @@ function testDesktopPersistenceDelegatesSnapshotAndLanguageSaves() {
   });
 }
 
-testCreateAppStateRequiresDesktopPersistence();
-testDesktopHomeGridColumnsPersistToSettings();
-testRoundHistoryDropsOldEntriesAndLimitsPerDeck();
-testStudyProgressEntryCanBeRestoredAndDeleted();
-testHomeMediaCachePersistsLoadsAndPrunes();
-testDesktopLoadReadsRepositoryDataDirectly();
-testDesktopPersistenceDelegatesSnapshotAndLanguageSaves();
+(async () => {
+  testCreateAppStateRequiresDesktopPersistence();
+  testDesktopHomeGridColumnsPersistToSettings();
+  testRoundHistoryDropsOldEntriesAndLimitsPerDeck();
+  testStudyProgressEntryCanBeRestoredAndDeleted();
+  testHomeMediaCachePersistsLoadsAndPrunes();
+  testDesktopLoadReadsRepositoryDataDirectly();
+  await testDesktopLoadFullDataPrefersAsyncRepositoryData();
+  await testDesktopLoadFullDataFallsBackToSyncRepositoryData();
+  testDesktopPersistenceDelegatesSnapshotAndLanguageSaves();
 
-console.log("app-state tests passed");
+  console.log("app-state tests passed");
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -5,7 +5,7 @@ const SHELL_MARKERS = Object.freeze({
   main: "#appMain"
 });
 
-const STARTUP_VERIFY_TIMEOUT_MS = 10000;
+const STARTUP_VERIFY_TIMEOUT_MS = 45000;
 const MIN_NORMALIZED_BODY_LENGTH = 24;
 const MAX_LOG_PREVIEW_LENGTH = 120;
 const RAW_BOOTSTRAP_SIGNATURES = Object.freeze([
@@ -50,9 +50,11 @@ function evaluateVerificationResult(input = {}) {
   const normalizedBodyText = normalizeBodyText(input.normalizedBodyText || "");
   const hasAppShell = Boolean(input.hasAppShell);
   const hasAppMain = Boolean(input.hasAppMain);
+  const hasRendererReady = Boolean(input.hasRendererReady);
   const timeout = Boolean(input.timeout);
   const navigationError = input.navigationError ? String(input.navigationError) : "";
   const rendererError = input.rendererError ? String(input.rendererError) : "";
+  const rendererStartupError = input.rendererStartupError ? String(input.rendererStartupError) : "";
   const hasRawBootstrapText = Boolean(input.hasRawBootstrapText) || detectRawBootstrap(normalizedBodyText);
   const bodyTooShort = normalizedBodyText.length < MIN_NORMALIZED_BODY_LENGTH;
   const preview = makePreview(input.preview || normalizedBodyText);
@@ -65,14 +67,18 @@ function evaluateVerificationResult(input = {}) {
     reason = "navigation_error";
   } else if (rendererError) {
     reason = "renderer_error";
+  } else if (rendererStartupError) {
+    reason = "renderer_startup_error";
   } else if (hasRawBootstrapText) {
     reason = "raw_bootstrap";
-  } else if (bodyTooShort) {
-    reason = "body_too_short";
   } else if (!hasAppShell) {
     reason = "missing_shell";
   } else if (!hasAppMain) {
     reason = "missing_main";
+  } else if (!hasRendererReady) {
+    reason = "not_ready";
+  } else if (bodyTooShort) {
+    reason = "body_too_short";
   }
 
   return {
@@ -81,8 +87,10 @@ function evaluateVerificationResult(input = {}) {
     timeout,
     navigationError,
     rendererError,
+    rendererStartupError,
     hasAppShell,
     hasAppMain,
+    hasRendererReady,
     hasRawBootstrapText,
     bodyTooShort,
     normalizedBodyText,
@@ -98,12 +106,15 @@ function formatFailedAttemptLog(options = {}) {
     : 0;
   const url = String(options.url || "");
   const preview = escapePreviewForLog(evaluation.preview);
+  const startupError = escapePreviewForLog(evaluation.rendererStartupError);
 
   return `[karto][startup-check] attempt=${attempt} reason=${evaluation.reason || "unknown"}` +
     ` elapsed_ms=${elapsedMs} url=${url}` +
     ` shell=${evaluation.hasAppShell ? 1 : 0}` +
     ` main=${evaluation.hasAppMain ? 1 : 0}` +
+    ` ready=${evaluation.hasRendererReady ? 1 : 0}` +
     ` raw_bootstrap=${evaluation.hasRawBootstrapText ? 1 : 0}` +
+    (startupError ? ` startup_error="${startupError}"` : "") +
     ` preview="${preview}"`;
 }
 
@@ -117,10 +128,14 @@ function buildRendererVerificationScript() {
   const detectRawBootstrap = ${detectRawBootstrap.toString()};
   const makePreview = ${makePreview.toString()};
   const normalizedBodyText = normalizeBodyText(document.body?.innerText || "");
+  const startup = window.__kartoStartup || {};
+  const rendererStartupError = startup.error ? String(startup.error) : "";
 
   return {
     hasAppShell: Boolean(document.querySelector(SHELL_MARKERS.shell)),
     hasAppMain: Boolean(document.querySelector(SHELL_MARKERS.main)),
+    hasRendererReady: startup.ready === true,
+    rendererStartupError,
     normalizedBodyText,
     hasRawBootstrapText: detectRawBootstrap(normalizedBodyText),
     preview: makePreview(normalizedBodyText)

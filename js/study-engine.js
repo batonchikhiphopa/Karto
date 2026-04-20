@@ -18,7 +18,7 @@
   }
 
   function shuffleCards(cards, randomFn = Math.random) {
-    const result = cards.map((card) => ({ ...card }));
+    const result = cloneCards(cards);
 
     for (let index = result.length - 1; index > 0; index -= 1) {
       const swapIndex = Math.floor(randomFn() * (index + 1));
@@ -131,7 +131,14 @@
   }
 
   function cloneCards(cards) {
-    return Array.isArray(cards) ? cards.map((card) => ({ ...card })) : [];
+    return Array.isArray(cards)
+      ? cards.map((card) => ({
+        ...card,
+        extraSides: Array.isArray(card.extraSides)
+          ? card.extraSides.map((side) => ({ ...side }))
+          : []
+      }))
+      : [];
   }
 
   function cloneDueRounds(dueRounds) {
@@ -183,7 +190,7 @@
 
   function createStudyState(deck, randomFn = Math.random, options = {}) {
     const cards = Array.isArray(deck?.cards) ? deck.cards : [];
-    const allCards = cards.map((card) => ({ ...card }));
+    const allCards = cloneCards(cards);
     const dueRounds = {};
 
     allCards.forEach((card) => {

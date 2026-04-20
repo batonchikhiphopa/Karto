@@ -299,6 +299,11 @@
               </div>
               <textarea class="form-input form-textarea" id="backTextInput" data-i18n-placeholder="cardForm.backPlaceholder" placeholder="Definition or answer"></textarea>
 
+              <div class="extra-sides-section">
+                <div id="extraSidesList" class="extra-sides-list"></div>
+                <button class="lib-btn extra-side-add-btn" id="addExtraSideBtn" type="button" data-i18n="cardForm.addAnswerSide">Add additional side</button>
+              </div>
+
               <div class="form-label-row">
                 <label class="form-label" for="imageInput" data-i18n="cardForm.imageLabel">Image</label>
                 <div class="image-side-toggle" role="group" aria-label="Choose image side">
@@ -490,6 +495,7 @@
   </template>
 
   <script src="i18n.js"></script>
+  <script src="js/card-text-limits.js"></script>
   <script src="js/data-model.js"></script>
   <script src="js/image-utils.js"></script>
   <script src="js/dom-utils.js"></script>

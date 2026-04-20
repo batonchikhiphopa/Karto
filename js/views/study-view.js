@@ -56,6 +56,10 @@
       ctx.state.study.backShownCardId = null;
     }
 
+    function resetAnswerSideIndex() {
+      ctx.state.study.answerSideIndex = 0;
+    }
+
     function resetLabels() {
       ["wrongLabel", "correctLabel", "unsureLabel", "backLabel"].forEach((id) => {
         const label = document.getElementById(id);
@@ -193,13 +197,89 @@
       performStudyEdgeAction(edge);
     }
 
+    function getAnswerTexts(card) {
+      if (!card) {
+        return [];
+      }
+
+      return [card.backText]
+        .concat((Array.isArray(card.extraSides) ? card.extraSides : []).map((side) => side?.text))
+        .map((text) => String(text || "").trim())
+        .filter(Boolean);
+    }
+
+    function getCurrentAnswerSideIndex(card = getCurrentStudyCard(ctx.state.study)) {
+      if (!ctx.state.study.flipped) {
+        return 0;
+      }
+
+      const sideCount = Math.max(1, getAnswerTexts(card).length);
+      const index = Number.isFinite(Number(ctx.state.study.answerSideIndex))
+        ? Math.round(Number(ctx.state.study.answerSideIndex))
+        : 0;
+      const clampedIndex = clamp(index, 0, sideCount - 1);
+      ctx.state.study.answerSideIndex = clampedIndex;
+      return clampedIndex;
+    }
+
     function getCurrentSide() {
-      return ctx.state.study.flipped ? "back" : "front";
+      if (!ctx.state.study.flipped) {
+        return "front";
+      }
+
+      return getCurrentAnswerSideIndex() > 0 ? "extra" : "back";
     }
 
     function getCurrentText(card) {
-      return ctx.state.study.flipped ? card.backText : card.frontText;
+      if (!ctx.state.study.flipped) {
+        return card.frontText;
+      }
+
+      return getAnswerTexts(card)[getCurrentAnswerSideIndex(card)] || card.backText;
     }
+
+    function splitStudyParagraphs(text) {
+  return String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .split(/\n\s*\n/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function createStudyTextNode(text, options = {}) {
+  const {
+    isFlipped = false,
+    hasMedia = false
+  } = options;
+
+  const className = `${isFlipped ? "study-back-text" : "study-front-text"}${hasMedia ? " has-media" : ""}`;
+
+  if (!isFlipped) {
+    return createElement("div", {
+      className,
+      text
+    });
+  }
+
+  const paragraphs = splitStudyParagraphs(text);
+
+  if (paragraphs.length <= 1) {
+    return createElement("div", {
+      className,
+      text
+    });
+  }
+
+  return createElement("div", {
+    className,
+    children: paragraphs.map((paragraph) =>
+      createElement("p", {
+        className: "study-paragraph",
+        text: paragraph
+      })
+    )
+  });
+}
 
     function normalizeStudyImageUrl(value) {
       return Karto.normalizeImageSource?.(value) || "";
@@ -411,6 +491,8 @@
       }
 
       const text = getCurrentText(card);
+      const answerTexts = getAnswerTexts(card);
+      const answerSideIndex = getCurrentAnswerSideIndex(card);
       const imageUrl = getCurrentImage(card, currentSide);
       const imageMeta = imageUrl ? ensureImageMeta(imageUrl) : null;
       const visibleImageUrl = imageMeta?.status === "error" ? null : imageUrl;
@@ -445,14 +527,23 @@
         }));
       }
 
+      const copyChildren = [];
+      if (ctx.state.study.flipped && answerTexts.length > 1) {
+        copyChildren.push(createElement("div", {
+          className: "study-answer-progress",
+          text: `${answerSideIndex + 1} / ${answerTexts.length}`
+        }));
+      }
+
+      const textElement = createStudyTextNode(text, {
+        isFlipped: ctx.state.study.flipped,
+        hasMedia: !!visibleImageUrl
+      });
+      copyChildren.push(textElement);
+
       content.appendChild(createElement("div", {
         className: "study-card-copy",
-        children: [
-          createElement("div", {
-            className: `${ctx.state.study.flipped ? "study-back-text" : "study-front-text"}${visibleImageUrl ? " has-media" : ""}`,
-            text
-          })
-        ]
+        children: copyChildren
       }));
 
       cardElement.appendChild(content);
@@ -466,7 +557,6 @@
 
       render();
       resetGlow();
-      cardElement.focus();
 
       void (async () => {
         await loadStudyMedia(getUpcomingStudyCards(STUDY_PRELOAD_WINDOW));
@@ -508,6 +598,7 @@
         completedRounds: ctx.store.getCompletedRoundsForDeck(deckId),
         preferredCardIds
       });
+      resetAnswerSideIndex();
       ctx.state.study.mode = "all";
       ctx.state.study.session = {
         deckId,
@@ -560,6 +651,7 @@
       recordAnswer(card.id, result);
       advanceStudy(ctx.state.study, result, Math.random, { previousProgressEntry });
       clearCurrentBackShown();
+      resetAnswerSideIndex();
       ctx.state.study.flipped = false;
       void showCurrentCardWhenReady();
     }
@@ -578,8 +670,27 @@
 
       recordAnswer(card.id, committedAnswer.result);
       clearCurrentBackShown();
+      resetAnswerSideIndex();
       ctx.state.study.flipped = false;
       void showCurrentCardWhenReady();
+      return true;
+    }
+
+    function advanceAnswerSide() {
+      const card = getCurrentStudyCard(ctx.state.study);
+      if (!card || !ctx.state.study.flipped) {
+        return false;
+      }
+
+      const answerTexts = getAnswerTexts(card);
+      const currentIndex = getCurrentAnswerSideIndex(card);
+      if (currentIndex >= answerTexts.length - 1) {
+        return false;
+      }
+
+      ctx.state.study.answerSideIndex = currentIndex + 1;
+      render();
+      resetGlow();
       return true;
     }
 
@@ -589,6 +700,20 @@
       }
 
       if (ctx.state.study.flipped) {
+        if (hasPendingAnswer()) {
+          if (ctx.state.study.pendingAnswer.result !== result) {
+            finalizeAnswer(result);
+            return;
+          }
+
+          if (advanceAnswerSide()) {
+            return;
+          }
+
+          finalizePendingAnswer();
+          return;
+        }
+
         finalizeAnswer(result);
         return;
       }
@@ -604,11 +729,16 @@
       }
 
       if (hasPendingAnswer()) {
+        if (advanceAnswerSide()) {
+          return;
+        }
+
         finalizePendingAnswer();
         return;
       }
 
       if (queuePendingStudyAnswer(ctx.state.study, result)) {
+        resetAnswerSideIndex();
         markCurrentBackShown();
         render();
         resetGlow();
@@ -618,16 +748,25 @@
     function handleCardAction() {
       if (!ctx.state.study.queue.length) return;
 
-      if (ctx.state.study.flipped && hasPendingAnswer()) {
-        finalizePendingAnswer();
+      if (ctx.state.study.flipped) {
+        if (advanceAnswerSide()) {
+          return;
+        }
+
+        if (hasPendingAnswer()) {
+          finalizePendingAnswer();
+          return;
+        }
+
+        ctx.state.study.flipped = false;
+        resetAnswerSideIndex();
+        void showCurrentCardWhenReady();
         return;
       }
 
-      const shouldShowBack = !ctx.state.study.flipped;
-      ctx.state.study.flipped = shouldShowBack;
-      if (shouldShowBack) {
-        markCurrentBackShown();
-      }
+      ctx.state.study.flipped = true;
+      resetAnswerSideIndex();
+      markCurrentBackShown();
       void showCurrentCardWhenReady();
     }
 
@@ -637,6 +776,7 @@
         restoreProgressSnapshot(undoneAnswer.cardId, undoneAnswer.previousProgressEntry);
         undoSessionAnswer(undoneAnswer.result);
         clearCurrentBackShown();
+        resetAnswerSideIndex();
         void showCurrentCardWhenReady();
         return;
       }

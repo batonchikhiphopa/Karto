@@ -9,6 +9,7 @@ const {
   createCard: createCardModel,
   createDeck: createDeckModel,
   createId,
+  normalizeExtraSides,
   normalizeStoredDecks
 } = require("./data-model");
 const {
@@ -163,6 +164,10 @@ function safeParseJson(value, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function parseExtraSides(value) {
+  return normalizeExtraSides(safeParseJson(value, []));
 }
 
 function normalizeHomeMediaCacheEntry(entry) {
@@ -371,6 +376,7 @@ function mapCardRow(row, options = {}) {
     id: row.id,
     frontText: row.frontText,
     backText: row.backText,
+    extraSides: parseExtraSides(row.extraSides),
     image: options.includeFullImage ? fullImage : "",
     imageThumb,
     imageStudy,
@@ -456,6 +462,7 @@ function createSqliteRepository(options = {}) {
       image_thumb TEXT NOT NULL DEFAULT '',
       image_study TEXT NOT NULL DEFAULT '',
       image_side TEXT NOT NULL DEFAULT 'back',
+      extra_sides TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL,
       sort_index INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY(deck_id) REFERENCES decks(id) ON DELETE CASCADE
@@ -510,6 +517,9 @@ function createSqliteRepository(options = {}) {
   if (!cardColumns.some((column) => column.name === "image_study")) {
     db.exec("ALTER TABLE cards ADD COLUMN image_study TEXT NOT NULL DEFAULT ''");
   }
+  if (!cardColumns.some((column) => column.name === "extra_sides")) {
+    db.exec("ALTER TABLE cards ADD COLUMN extra_sides TEXT NOT NULL DEFAULT '[]'");
+  }
 
   const statements = {
     deleteAllDecks: db.prepare("DELETE FROM decks"),
@@ -531,6 +541,7 @@ function createSqliteRepository(options = {}) {
         image_thumb AS imageThumb,
         image_study AS imageStudy,
         image_side AS imageSide,
+        extra_sides AS extraSides,
         created_at AS createdAt,
         sort_index AS sortIndex
       FROM cards
@@ -616,9 +627,10 @@ function createSqliteRepository(options = {}) {
         image_thumb,
         image_study,
         image_side,
+        extra_sides,
         created_at,
         sort_index
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         deck_id = excluded.deck_id,
         front_text = excluded.front_text,
@@ -627,6 +639,7 @@ function createSqliteRepository(options = {}) {
         image_thumb = excluded.image_thumb,
         image_study = excluded.image_study,
         image_side = excluded.image_side,
+        extra_sides = excluded.extra_sides,
         created_at = excluded.created_at,
         sort_index = excluded.sort_index
     `),
@@ -638,7 +651,8 @@ function createSqliteRepository(options = {}) {
         image,
         image_thumb AS imageThumb,
         image_study AS imageStudy,
-        image_side AS imageSide
+        image_side AS imageSide,
+        extra_sides AS extraSides
       FROM cards
       WHERE id IN (SELECT value FROM json_each(?))
       ORDER BY deck_id ASC, sort_index ASC, created_at ASC, id ASC
@@ -893,6 +907,7 @@ function createSqliteRepository(options = {}) {
           persistedCard.imageThumb || "",
           persistedCard.imageStudy || "",
           persistedCard.imageSide === "front" ? "front" : "back",
+          JSON.stringify(normalizeExtraSides(persistedCard.extraSides)),
           existingCardCreatedAt.get(persistedCard.id) || now,
           cardIndex
         );
@@ -993,6 +1008,7 @@ function createSqliteRepository(options = {}) {
       normalizedCard.imageThumb || "",
       normalizedCard.imageStudy || "",
       normalizedCard.imageSide,
+      JSON.stringify(normalizeExtraSides(normalizedCard.extraSides)),
       now,
       sortIndex
     );

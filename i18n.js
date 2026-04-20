@@ -148,7 +148,15 @@
         imageSideFront: "Show image on the front side",
         imageSideBack: "Show image on the back side",
         addCard: "Add card",
-        clearImage: "Clear image"
+        clearImage: "Clear image",
+        addAnswerSide: "Add additional side",
+        answerSideLabel: "Additional side {number}",
+        answerSidePlaceholder: "More text for additional side {number}",
+        removeAnswerSide: "Remove additional side {number}",
+        extraSideLimit: "Maximum additional sides reached",
+        textCounter: "{lines} / {maxLines} lines · {chars} / {maxChars} chars",
+        textLimitHint: "Better move part of this text to an additional side.",
+        textLimitError: "This field is over the line or character limit."
       },
       createDeck: {
         title: "Create deck",
@@ -229,7 +237,8 @@
         windowModeUnavailable: "Window mode could not be updated.",
         settingsSaved: "Settings saved.",
         settingsSaveFailed: "Settings could not be saved.",
-        quitUnavailable: "The app could not be closed."
+        quitUnavailable: "The app could not be closed.",
+        textLimitExceeded: "Shorten the text or move part of it to an additional side."
       },
       test: {
         fallbackOnly: "Fallback works"
@@ -372,7 +381,15 @@
         imageSideFront: "Показывать картинку на лицевой стороне",
         imageSideBack: "Показывать картинку на обратной стороне",
         addCard: "Добавить карточку",
-        clearImage: "Очистить изображение"
+        clearImage: "Очистить изображение",
+        addAnswerSide: "Добавить дополнительную сторону",
+        answerSideLabel: "Дополнительная сторона {number}",
+        answerSidePlaceholder: "Текст для дополнительной стороны {number}",
+        removeAnswerSide: "Удалить дополнительную сторону {number}",
+        extraSideLimit: "Достигнут максимум дополнительных сторон",
+        textCounter: "{lines} / {maxLines} строк · {chars} / {maxChars} символов",
+        textLimitHint: "Лучше перенести часть текста на дополнительную сторону.",
+        textLimitError: "В этом поле превышен лимит строк или символов."
       },
       createDeck: {
         title: "Создать колоду",
@@ -453,7 +470,8 @@
         windowModeUnavailable: "Не удалось переключить режим окна.",
         settingsSaved: "Настройки сохранены.",
         settingsSaveFailed: "Не удалось сохранить настройки.",
-        quitUnavailable: "Не удалось закрыть приложение."
+        quitUnavailable: "Не удалось закрыть приложение.",
+        textLimitExceeded: "Сократи текст или перенеси часть на дополнительную сторону."
       }
     },
     de: {
@@ -591,7 +609,15 @@
         imageSideFront: "Bild auf der Vorderseite zeigen",
         imageSideBack: "Bild auf der Rückseite zeigen",
         addCard: "Karte hinzufügen",
-        clearImage: "Bild entfernen"
+        clearImage: "Bild entfernen",
+        addAnswerSide: "Zusätzliche Seite hinzufügen",
+        answerSideLabel: "Zusätzliche Seite {number}",
+        answerSidePlaceholder: "Weiterer Text für zusätzliche Seite {number}",
+        removeAnswerSide: "Zusätzliche Seite {number} entfernen",
+        extraSideLimit: "Maximale Anzahl zusätzlicher Seiten erreicht",
+        textCounter: "{lines} / {maxLines} Zeilen · {chars} / {maxChars} Zeichen",
+        textLimitHint: "Verschiebe einen Teil des Textes besser auf eine zusätzliche Seite.",
+        textLimitError: "Dieses Feld überschreitet das Zeilen- oder Zeichenlimit."
       },
       createDeck: {
         title: "Deck erstellen",
@@ -672,7 +698,8 @@
         windowModeUnavailable: "Der Fenstermodus konnte nicht geändert werden.",
         settingsSaved: "Einstellungen gespeichert.",
         settingsSaveFailed: "Die Einstellungen konnten nicht gespeichert werden.",
-        quitUnavailable: "Die App konnte nicht beendet werden."
+        quitUnavailable: "Die App konnte nicht beendet werden.",
+        textLimitExceeded: "Kürze den Text oder verschiebe einen Teil auf eine zusätzliche Seite."
       }
     }
   };

@@ -46,6 +46,7 @@ function testCrudAndLoadAppData() {
       deckId: deck.id,
       frontText: "Haus",
       backText: "Дом",
+      extraSides: [{ id: "side_haus_1", text: "building" }],
       image: "https://example.com/haus.jpg",
       imageThumb: "https://example.com/haus-thumb.jpg",
       imageStudy: "https://example.com/haus-study.jpg",
@@ -60,6 +61,7 @@ function testCrudAndLoadAppData() {
     assert.equal(decks[0].cards[0].imageThumb, "https://example.com/haus-thumb.jpg");
     assert.equal(decks[0].cards[0].imageStudy, "https://example.com/haus-study.jpg");
     assert.equal(decks[0].cards[0].imageSide, "front");
+    assert.deepEqual(decks[0].cards[0].extraSides, [{ id: "side_haus_1", text: "building" }]);
 
     const appData = repository.loadAppData();
     assert.equal(appData.themePreference, "system");
@@ -82,7 +84,8 @@ function testSaveDeckSnapshotPreservesOrder() {
               image: "",
               imageThumb: "",
               imageStudy: "",
-              imageSide: "back"
+              imageSide: "back",
+              extraSides: [{ id: "side_b", text: "extra beta" }]
             }
           ]
         },
@@ -123,6 +126,7 @@ function testSaveDeckSnapshotPreservesOrder() {
       ["card_2", "card_1"]
     );
     assert.equal(decks[1].cards[1].imageThumb, "https://example.com/one-thumb.jpg");
+    assert.deepEqual(decks[0].cards[0].extraSides, [{ id: "side_b", text: "extra beta" }]);
   });
 }
 

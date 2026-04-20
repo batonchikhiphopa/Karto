@@ -34,6 +34,31 @@ function testCardsPreserveImageThumb() {
   assert.equal(createExportPayload([deck]).decks[0].cards[0].imageThumb, card.imageThumb);
 }
 
+function testCardsPreserveExtraSidesAndNormalizeFrontLines() {
+  const card = createCard({
+    frontText: "hello\nworld",
+    backText: "answer",
+    extraSides: [
+      { id: "side_one", text: "second additional side" },
+      { text: "   " },
+      "third additional side"
+    ],
+    image: ""
+  });
+  const deck = createDeck("Extra");
+  deck.cards.push(card);
+  const storedDecks = normalizeStoredDecks(createStoragePayload([deck]));
+  const exportedCard = createExportPayload([deck]).decks[0].cards[0];
+
+  assert.equal(card.frontText, "hello world");
+  assert.deepEqual(
+    card.extraSides.map((side) => side.text),
+    ["second additional side", "third additional side"]
+  );
+  assert.deepEqual(storedDecks[0].cards[0].extraSides, card.extraSides);
+  assert.deepEqual(exportedCard.extraSides, card.extraSides);
+}
+
 function testPartialDecksPreserveCardCountAndLightMedia() {
   const decks = normalizeStoredDecks({
     decks: [
@@ -130,6 +155,37 @@ function testImageThumbDoesNotAffectFingerprintOrDuplicateChecks() {
   assert.equal(cardFingerprint(first), cardFingerprint(second));
   assert.equal(result.skippedCount, 1);
   assert.equal(result.cards.length, 0);
+}
+
+function testExtraSidesAffectFingerprintAndDuplicateChecks() {
+  const first = createCard({
+    frontText: "cat",
+    backText: "Katze",
+    extraSides: [{ id: "side_1", text: "animal" }],
+    image: ""
+  });
+  const same = createCard({
+    frontText: "cat",
+    backText: "Katze",
+    extraSides: [{ id: "side_2", text: "animal" }],
+    image: ""
+  });
+  const different = createCard({
+    frontText: "cat",
+    backText: "Katze",
+    extraSides: [{ id: "side_3", text: "noun" }],
+    image: ""
+  });
+  const targetDeck = createDeck("Target");
+  targetDeck.cards.push(first);
+
+  const sameResult = prepareDeckImport([same], targetDeck);
+  const differentResult = prepareDeckImport([different], targetDeck);
+
+  assert.equal(cardFingerprint(first), cardFingerprint(same));
+  assert.notEqual(cardFingerprint(first), cardFingerprint(different));
+  assert.equal(sameResult.skippedCount, 1);
+  assert.equal(differentResult.cards.length, 1);
 }
 
 function testNormalizeStoredDecksMigratesLegacyData() {
@@ -392,9 +448,11 @@ function testSaveEditedCardToDeckHandlesTargetIdCollision() {
 }
 
 testCardsPreserveImageThumb();
+testCardsPreserveExtraSidesAndNormalizeFrontLines();
 testPartialDecksPreserveCardCountAndLightMedia();
 testStoragePayloadDoesNotFingerprintDedupePartialDecks();
 testImageThumbDoesNotAffectFingerprintOrDuplicateChecks();
+testExtraSidesAffectFingerprintAndDuplicateChecks();
 testNormalizeStoredDecksMigratesLegacyData();
 testPrepareLibraryImportHandlesDuplicatesAndIdCollisions();
 testPrepareDeckImportHandlesDuplicatesAndIdCollisions();

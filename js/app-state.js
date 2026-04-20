@@ -295,6 +295,14 @@
       return desktopPersistence.loadAppDataSync();
     }
 
+    function loadFullDataFromDesktopPersistence() {
+      if (typeof desktopPersistence.loadAppData === "function") {
+        return desktopPersistence.loadAppData();
+      }
+
+      return desktopPersistence.loadAppDataSync();
+    }
+
     async function loadShellFromDesktopPersistence() {
       if (typeof desktopPersistence.loadAppShellData === "function") {
         return desktopPersistence.loadAppShellData();
@@ -336,6 +344,11 @@
 
     function load() {
       const payload = loadFromDesktopPersistence();
+      applyLoadedPayload(payload);
+    }
+
+    async function loadFullData() {
+      const payload = await loadFullDataFromDesktopPersistence();
       applyLoadedPayload(payload);
     }
 
@@ -678,6 +691,7 @@
     return {
       state,
       load,
+      loadFullData,
       loadShell,
       saveDecksNow,
       saveDecksSoon,

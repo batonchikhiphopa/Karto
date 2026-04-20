@@ -60,6 +60,10 @@ function registerDataIpcHandlers({ ipcMain, getDataRepository, formatErrorDetail
     return getDataRepository().loadAppData();
   });
 
+  registerAsync("karto-data:load-app-data", () => {
+    return getDataRepository().loadAppData();
+  });
+
   registerAsync("karto-data:load-app-shell-data", () => {
     return getDataRepository().loadAppShellData();
   });

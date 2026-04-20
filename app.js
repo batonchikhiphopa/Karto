@@ -1,4 +1,9 @@
 (async function(root) {
+  root.__kartoStartup = {
+    ready: false,
+    error: ""
+  };
+
   const STARTUP_MEDIA_PREWARM_TIMEOUT_MS = 1200;
   const store = root.Karto.createAppState();
   const { state } = store;
@@ -64,7 +69,7 @@
     ]);
   }
 
-  await store.loadShell();
+  await store.loadFullData();
   setLanguage(state.languagePreference, {
     persist: false,
     refresh: false,
@@ -471,8 +476,14 @@
     bootScreen.hidden = true;
   }
   document.body.classList.add("app-loaded");
+  root.__kartoStartup.ready = true;
+  root.__kartoStartup.error = "";
 })(window).catch((error) => {
   console.error("[karto] Failed to start renderer:", error);
+  window.__kartoStartup = {
+    ready: false,
+    error: error?.stack || error?.message || String(error)
+  };
   const bootScreen = document.getElementById("bootScreen");
   if (bootScreen) {
     bootScreen.hidden = false;

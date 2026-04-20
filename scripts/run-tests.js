@@ -7,6 +7,7 @@ const projectRoot = path.resolve(__dirname, "..");
 const electronPath = require("electron");
 
 const nodeTests = [
+  "tests/card-text-limits.test.js",
   "tests/data-model.test.js",
   "tests/image-utils.test.js",
   "tests/study-engine.test.js",
