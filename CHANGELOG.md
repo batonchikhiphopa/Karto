@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.5.0
+
+[Compare with 1.4.0](https://github.com/batonchikhiphopa/Karto/compare/v1.4.0...v1.5.0)
+
+### Added
+
+- Added additional answer sides for cards, including creation, editing, export/import, and SQLite storage.
+- Added contextual text limits and tooltips for front, back, and additional-side card fields.
+
+### Changed
+
+- Updated study mode to show answer sides in sequence and keep the selected result pending until the final side.
+- Updated desktop startup to wait for full app data and renderer readiness before showing the main window.
+
+### Fixed
+
+- Improved cold-start resilience with a longer startup timeout, readiness polling, and clearer startup diagnostics.
+
+### Tests
+
+- Added unit and smoke coverage for additional answer sides, text limits, startup readiness, and full-data loading.
+
 ## 1.4.0
 
 [Compare with 1.3.2](https://github.com/batonchikhiphopa/Karto/compare/v1.3.2...v1.4.0)

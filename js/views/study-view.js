@@ -239,47 +239,47 @@
     }
 
     function splitStudyParagraphs(text) {
-  return String(text || "")
-    .replace(/\r\n?/g, "\n")
-    .split(/\n\s*\n/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
+      return String(text || "")
+        .replace(/\r\n?/g, "\n")
+        .split(/\n\s*\n/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    }
 
-function createStudyTextNode(text, options = {}) {
-  const {
-    isFlipped = false,
-    hasMedia = false
-  } = options;
+    function createStudyTextNode(text, options = {}) {
+      const {
+        isFlipped = false,
+        hasMedia = false
+      } = options;
 
-  const className = `${isFlipped ? "study-back-text" : "study-front-text"}${hasMedia ? " has-media" : ""}`;
+      const className = `${isFlipped ? "study-back-text" : "study-front-text"}${hasMedia ? " has-media" : ""}`;
 
-  if (!isFlipped) {
-    return createElement("div", {
-      className,
-      text
-    });
-  }
+      if (!isFlipped) {
+        return createElement("div", {
+          className,
+          text
+        });
+      }
 
-  const paragraphs = splitStudyParagraphs(text);
+      const paragraphs = splitStudyParagraphs(text);
 
-  if (paragraphs.length <= 1) {
-    return createElement("div", {
-      className,
-      text
-    });
-  }
+      if (paragraphs.length <= 1) {
+        return createElement("div", {
+          className,
+          text
+        });
+      }
 
-  return createElement("div", {
-    className,
-    children: paragraphs.map((paragraph) =>
-      createElement("p", {
-        className: "study-paragraph",
-        text: paragraph
-      })
-    )
-  });
-}
+      return createElement("div", {
+        className,
+        children: paragraphs.map((paragraph) =>
+          createElement("p", {
+            className: "study-paragraph",
+            text: paragraph
+          })
+        )
+      });
+    }
 
     function normalizeStudyImageUrl(value) {
       return Karto.normalizeImageSource?.(value) || "";
