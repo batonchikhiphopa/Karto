@@ -137,7 +137,7 @@ function testPackageVersionMetadataAndScripts() {
   const pkg = JSON.parse(readProjectFile("package.json"));
   const lock = JSON.parse(readProjectFile("package-lock.json"));
 
-  assert.equal(pkg.version, "1.4.0");
+  assert.equal(pkg.version, "1.5.0");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.equal(pkg.license, "MIT");
