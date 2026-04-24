@@ -63,13 +63,34 @@
       return String(lang || "").toUpperCase();
     }
 
+    function normalizeLimitKind(kind) {
+      if (kind === "front" || kind === "extra") {
+        return kind;
+      }
+
+      return "back";
+    }
+
     function getLimit(kind) {
-      return Karto.getCardTextLimit?.(kind) || {
-        hardChars: kind === "front" ? 120 : 700,
-        softChars: kind === "front" ? 80 : 450,
-        hardLines: kind === "front" ? 2 : 6,
-        softLines: kind === "front" ? 2 : 5
+      const normalizedKind = normalizeLimitKind(kind);
+      return Karto.getCardTextLimit?.(normalizedKind) || {
+        hardChars: normalizedKind === "front" ? 120 : normalizedKind === "extra" ? 1600 : 700,
+        softChars: normalizedKind === "front" ? 80 : normalizedKind === "extra" ? 1600 : 700,
+        hardLines: normalizedKind === "front" ? 2 : normalizedKind === "extra" ? 14 : 6,
+        softLines: normalizedKind === "front" ? 2 : normalizedKind === "extra" ? 14 : 6
       };
+    }
+
+    function getFieldLimitKind(field) {
+      if (field === frontInput) {
+        return "front";
+      }
+
+      if (extraSideControls.some((control) => control.textarea === field)) {
+        return "extra";
+      }
+
+      return "back";
     }
 
     function getMeasureElement() {
@@ -150,18 +171,8 @@
       };
     }
 
-    function formatTextCounter(metrics) {
-      return t("cardForm.textCounter", {
-        lines: metrics.lineCount,
-        maxLines: metrics.maxLines,
-        chars: metrics.charCount,
-        maxChars: metrics.maxChars
-      });
-    }
-
     function formatLimitMessage(metrics) {
-      const messageKey = metrics.isError ? "cardForm.textLimitError" : "cardForm.textLimitHint";
-      return `${formatTextCounter(metrics)}. ${t(messageKey)}`;
+      return metrics.isError ? t("cardForm.textLimitError") : "";
     }
 
     function getLimitTooltip() {
@@ -200,8 +211,8 @@
       tooltip.style.top = `${top}px`;
     }
 
-    function showLimitTooltip(field, metrics = createMetrics(field, field === frontInput ? "front" : "answer")) {
-      if (!metrics.isWarning && !metrics.isError) {
+    function showLimitTooltip(field, metrics = createMetrics(field, getFieldLimitKind(field))) {
+      if (!metrics.isError) {
         hideLimitTooltip(field);
         return;
       }
@@ -230,16 +241,16 @@
         return;
       }
 
-      const metrics = createMetrics(activeLimitField, activeLimitField === frontInput ? "front" : "answer");
+      const metrics = createMetrics(activeLimitField, getFieldLimitKind(activeLimitField));
       showLimitTooltip(activeLimitField, metrics);
     }
 
     function updateLimitState(field, kind) {
       const metrics = createMetrics(field, kind);
-      field.classList.toggle("is-limit-warning", metrics.isWarning && !metrics.isError);
+      field.classList.remove("is-limit-warning");
       field.classList.toggle("is-limit-error", metrics.isError);
 
-      if (metrics.isWarning || metrics.isError) {
+      if (metrics.isError) {
         const message = formatLimitMessage(metrics);
         getLimitTooltip();
         field.title = message;
@@ -259,9 +270,9 @@
 
     function syncLimitStates() {
       updateLimitState(frontInput, "front");
-      updateLimitState(backInput, "answer");
+      updateLimitState(backInput, "back");
       extraSideControls.forEach((control) => {
-        updateLimitState(control.textarea, "answer");
+        updateLimitState(control.textarea, "extra");
       });
       refreshActiveLimitTooltip();
     }
@@ -522,7 +533,7 @@
           }
         }
       });
-      bindLimitField(textarea, "answer");
+      bindLimitField(textarea, "extra");
       const wrap = createElement("div", {
         className: "extra-side-item",
         dataset: { sideId },
@@ -566,10 +577,10 @@
     function validateTextLimits() {
       const fields = [
         { field: frontInput, kind: "front" },
-        { field: backInput, kind: "answer" },
+        { field: backInput, kind: "back" },
         ...extraSideControls.map((control) => ({
           field: control.textarea,
-          kind: "answer"
+          kind: "extra"
         }))
       ];
       const invalidEntry = fields
@@ -950,7 +961,7 @@
       }
     });
     bindLimitField(frontInput, "front");
-    bindLimitField(backInput, "answer");
+    bindLimitField(backInput, "back");
     definitionBtn.addEventListener("click", (event) => {
       fetchDefinition(event.currentTarget);
     });

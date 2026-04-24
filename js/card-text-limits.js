@@ -7,19 +7,30 @@
 
   Object.assign(root, api);
 })(typeof window !== "undefined" ? window : globalThis, function() {
+  const FRONT_TEXT_LIMIT = Object.freeze({
+    hardChars: 120,
+    softChars: 80,
+    hardLines: 2,
+    softLines: 2
+  });
+  const BACK_TEXT_LIMIT = Object.freeze({
+    hardChars: 700,
+    softChars: 700,
+    hardLines: 6,
+    softLines: 6
+  });
+  const EXTRA_TEXT_LIMIT = Object.freeze({
+    hardChars: 1600,
+    softChars: 1600,
+    hardLines: 14,
+    softLines: 14
+  });
+
   const CARD_TEXT_LIMITS = Object.freeze({
-    front: Object.freeze({
-      hardChars: 120,
-      softChars: 80,
-      hardLines: 2,
-      softLines: 2
-    }),
-    answer: Object.freeze({
-      hardChars: 700,
-      softChars: 450,
-      hardLines: 6,
-      softLines: 5
-    }),
+    front: FRONT_TEXT_LIMIT,
+    back: BACK_TEXT_LIMIT,
+    answer: BACK_TEXT_LIMIT,
+    extra: EXTRA_TEXT_LIMIT,
     maxExtraSides: 5
   });
 
@@ -47,7 +58,15 @@
   }
 
   function getCardTextLimit(kind) {
-    return kind === "front" ? CARD_TEXT_LIMITS.front : CARD_TEXT_LIMITS.answer;
+    if (kind === "front") {
+      return CARD_TEXT_LIMITS.front;
+    }
+
+    if (kind === "extra") {
+      return CARD_TEXT_LIMITS.extra;
+    }
+
+    return CARD_TEXT_LIMITS.back;
   }
 
   function createCardTextMetrics(value, kind, options = {}) {
@@ -65,7 +84,7 @@
       maxChars: limit.hardChars,
       maxLines: limit.hardLines,
       isEmpty: text.trim().length === 0,
-      isWarning: charCount >= limit.softChars || lineCount >= limit.softLines,
+      isWarning: false,
       isError: charCount > limit.hardChars || lineCount > limit.hardLines
     };
   }

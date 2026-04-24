@@ -250,6 +250,7 @@
   max-width: none;
   align-items: flex-start;
   text-align: left;
+  min-width: 0;
 }
 
 .study-card.is-flipped .study-card-content.is-text-only .study-card-copy {

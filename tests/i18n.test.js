@@ -67,7 +67,8 @@ function testNewUiStringsAreLocalized() {
   assert.equal(t("alerts.settingsSaved"), "Настройки сохранены.");
   assert.equal(t("cardForm.addAnswerSide"), "Добавить дополнительную сторону");
   assert.equal(t("cardForm.answerSideLabel", { number: 2 }), "Дополнительная сторона 2");
-  assert.equal(t("alerts.textLimitExceeded"), "Сократи текст или перенеси часть на дополнительную сторону.");
+  assert.equal(t("cardForm.textLimitError"), "Текста слишком много, пожалуйста, добавьте extra_side.");
+  assert.equal(t("alerts.textLimitExceeded"), "Текста слишком много, пожалуйста, добавьте extra_side.");
   assert.equal(t("actions.moveCard"), "Переместить карточку");
   assert.equal(t("editDeck.moveConfirm"), "Переместить");
   assert.equal(

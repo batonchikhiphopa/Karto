@@ -317,6 +317,22 @@
       return normalizedText.length > 120 || lineBreaks >= 2;
     }
 
+    function getImageOrientation(meta) {
+      if (!meta || meta.status !== "loaded" || typeof meta.aspectRatio !== "number") {
+        return null;
+      }
+
+      if (meta.aspectRatio < 0.95) {
+        return "vertical";
+      }
+
+      if (meta.aspectRatio > 1.05) {
+        return "horizontal";
+      }
+
+      return null;
+    }
+
     function renderIfCurrentImage(url) {
       const currentCard = getCurrentStudyCard(ctx.state.study);
       if (!currentCard || getCurrentImage(currentCard, getCurrentSide()) !== url || !ctx.router.isVisible("studyScreen")) {
@@ -442,17 +458,24 @@
         return "text-only";
       }
 
+      const meta = ensureImageMeta(imageUrl);
+      const orientation = getImageOrientation(meta);
+      if (orientation === "vertical") {
+        return "side";
+      }
+
+      if (orientation === "horizontal") {
+        return "top";
+      }
+
       if (currentSide === "front") {
-        ensureImageMeta(imageUrl);
         return "top";
       }
 
       if (root.innerWidth < 960) {
-        ensureImageMeta(imageUrl);
         return "top";
       }
 
-      const meta = ensureImageMeta(imageUrl);
       if (!meta || meta.status !== "loaded" || typeof meta.aspectRatio !== "number") {
         return "top";
       }

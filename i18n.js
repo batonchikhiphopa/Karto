@@ -156,7 +156,7 @@
         extraSideLimit: "Maximum additional sides reached",
         textCounter: "{lines} / {maxLines} lines · {chars} / {maxChars} chars",
         textLimitHint: "Better move part of this text to an additional side.",
-        textLimitError: "This field is over the line or character limit."
+        textLimitError: "Too much text. Please add an extra_side."
       },
       createDeck: {
         title: "Create deck",
@@ -238,7 +238,7 @@
         settingsSaved: "Settings saved.",
         settingsSaveFailed: "Settings could not be saved.",
         quitUnavailable: "The app could not be closed.",
-        textLimitExceeded: "Shorten the text or move part of it to an additional side."
+        textLimitExceeded: "Too much text. Please add an extra_side."
       },
       test: {
         fallbackOnly: "Fallback works"
@@ -389,7 +389,7 @@
         extraSideLimit: "Достигнут максимум дополнительных сторон",
         textCounter: "{lines} / {maxLines} строк · {chars} / {maxChars} символов",
         textLimitHint: "Лучше перенести часть текста на дополнительную сторону.",
-        textLimitError: "В этом поле превышен лимит строк или символов."
+        textLimitError: "Текста слишком много, пожалуйста, добавьте extra_side."
       },
       createDeck: {
         title: "Создать колоду",
@@ -471,7 +471,7 @@
         settingsSaved: "Настройки сохранены.",
         settingsSaveFailed: "Не удалось сохранить настройки.",
         quitUnavailable: "Не удалось закрыть приложение.",
-        textLimitExceeded: "Сократи текст или перенеси часть на дополнительную сторону."
+        textLimitExceeded: "Текста слишком много, пожалуйста, добавьте extra_side."
       }
     },
     de: {
@@ -617,7 +617,7 @@
         extraSideLimit: "Maximale Anzahl zusätzlicher Seiten erreicht",
         textCounter: "{lines} / {maxLines} Zeilen · {chars} / {maxChars} Zeichen",
         textLimitHint: "Verschiebe einen Teil des Textes besser auf eine zusätzliche Seite.",
-        textLimitError: "Dieses Feld überschreitet das Zeilen- oder Zeichenlimit."
+        textLimitError: "Zu viel Text. Bitte füge eine extra_side hinzu."
       },
       createDeck: {
         title: "Deck erstellen",
@@ -699,7 +699,7 @@
         settingsSaved: "Einstellungen gespeichert.",
         settingsSaveFailed: "Die Einstellungen konnten nicht gespeichert werden.",
         quitUnavailable: "Die App konnte nicht beendet werden.",
-        textLimitExceeded: "Kürze den Text oder verschiebe einen Teil auf eine zusätzliche Seite."
+        textLimitExceeded: "Zu viel Text. Bitte füge eine extra_side hinzu."
       }
     }
   };

@@ -127,10 +127,36 @@
     padding: 0;
   }
 
-  .study-card-copy,
-  .study-card.is-layout-side .study-card-copy {
+  .study-card-copy {
     align-items: center;
     text-align: center;
+  }
+
+  .study-card-content.is-side {
+    gap: 12px;
+  }
+
+  .study-card.is-layout-side .study-card-media {
+    flex: 0 0 42%;
+    width: 42%;
+    max-width: 42%;
+  }
+
+  .study-card.is-layout-side .study-card-copy {
+    flex: 1 1 58%;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .study-card.is-layout-side .study-card-img {
+    max-height: min(58vh, 520px);
+    border-radius: 14px;
+  }
+
+  .study-card.is-layout-side .study-front-text.has-media {
+    max-width: 100%;
+    font-size: 2rem;
+    overflow-wrap: anywhere;
   }
 
   .study-front-text.has-media {
@@ -142,6 +168,12 @@
   .study-card.is-layout-side .study-back-text.has-media {
     font-size: clamp(1.45rem, 4.8vw, 2.35rem);
     max-width: 100%;
+  }
+
+  .study-card.is-layout-side .study-back-text.has-media {
+    max-width: 100%;
+    font-size: 1.35rem;
+    overflow-wrap: anywhere;
   }
 
   .lib-deck-row {

@@ -72,9 +72,9 @@ async function addCard(page, front, back) {
   await expect(page.locator("#editDeckCardList")).toContainText(front);
 }
 
-function createSvgDataUrl(label, color) {
+function createSvgDataUrl(label, color, width = 640, height = 420) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420"><rect width="640" height="420" fill="${color}"/><text x="40" y="220" font-size="56" fill="white">${label}</text></svg>`
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="${width}" height="${height}" fill="${color}"/><text x="40" y="${Math.round(height / 2)}" font-size="56" fill="white">${label}</text></svg>`
   )}`;
 }
 
@@ -333,6 +333,72 @@ test("desktop study mode: first image card can use thumbnail without blocking", 
   }
 });
 
+test("desktop study mode: image orientation controls media layout", async () => {
+  const { electronApp, page, userDataDir } = await launchKarto();
+
+  try {
+    const portraitImage = createSvgDataUrl("PORTRAIT", "#7c3aed", 420, 720);
+    const landscapeImage = createSvgDataUrl("LANDSCAPE", "#0f766e", 900, 420);
+
+    await page.evaluate((payload) => window.__kartoE2E.importLibraryPayload(payload), {
+      schemaVersion: 2,
+      decks: [
+        {
+          id: "deck_portrait_layout",
+          name: "Portrait Layout",
+          cards: [
+            {
+              id: "card_portrait_layout",
+              frontText: "portrait front",
+              backText: "portrait back",
+              image: portraitImage,
+              imageThumb: portraitImage,
+              imageSide: "front"
+            }
+          ]
+        },
+        {
+          id: "deck_landscape_layout",
+          name: "Landscape Layout",
+          cards: [
+            {
+              id: "card_landscape_layout",
+              frontText: "landscape front",
+              backText: [
+                "landscape answer with enough text to trigger the old side layout",
+                "second line",
+                "third line"
+              ].join("\n"),
+              image: landscapeImage,
+              imageThumb: landscapeImage,
+              imageSide: "back"
+            }
+          ]
+        }
+      ]
+    });
+
+    const studyCard = page.locator("#studyCard");
+    await page.locator("[data-action='study'][data-deck-id='deck_portrait_layout']").click();
+    await expect(page.locator("#studyScreen")).toHaveClass(/is-active/);
+    await expect(page.locator(".study-card-img")).toHaveAttribute("src", portraitImage);
+    await expect(studyCard).toHaveClass(/is-layout-side/);
+    await expect(studyCard).not.toHaveClass(/is-layout-top/);
+
+    await page.locator("#exitStudyBtn").click();
+    await expect(page.locator("#homeScreen")).toHaveClass(/is-active/);
+
+    await page.locator("[data-action='study'][data-deck-id='deck_landscape_layout']").click();
+    await expect(page.locator("#studyScreen")).toHaveClass(/is-active/);
+    await studyCard.click();
+    await expect(page.locator(".study-card-img")).toHaveAttribute("src", landscapeImage);
+    await expect(studyCard).toHaveClass(/is-layout-top/);
+    await expect(studyCard).not.toHaveClass(/is-layout-side/);
+  } finally {
+    await closeKarto(electronApp, userDataDir);
+  }
+});
+
 test("desktop cards can add and study additional sides", async () => {
   const { electronApp, page, userDataDir } = await launchKarto();
 
@@ -375,7 +441,7 @@ test("desktop cards can add and study additional sides", async () => {
   }
 });
 
-test("desktop card form shows contextual text limit tooltip and blocks hard limit", async () => {
+test("desktop card form shows text limit message only after hard limit", async () => {
   const { electronApp, page, userDataDir } = await launchKarto();
 
   try {
@@ -386,15 +452,42 @@ test("desktop card form shows contextual text limit tooltip and blocks hard limi
     await expect(page.locator(".field-limit-row")).toHaveCount(0);
 
     await page.locator("#frontTextInput").fill("a".repeat(81));
-    await expect(page.locator("#frontTextInput")).toHaveClass(/is-limit-warning/);
-    await expect(page.locator(".field-limit-tooltip.visible")).toContainText(/81 \/ 120 (chars|символов)/);
+    await expect(page.locator("#frontTextInput")).not.toHaveClass(/is-limit-warning/);
+    await expect(page.locator(".field-limit-tooltip.visible")).toHaveCount(0);
 
     await page.locator("#frontTextInput").fill("a".repeat(121));
-    await page.locator("#backTextInput").fill("valid answer");
     await expect(page.locator("#frontTextInput")).toHaveClass(/is-limit-error/);
     await expect(page.locator("#frontTextInput")).toHaveAttribute("aria-invalid", "true");
+    await expect(page.locator(".field-limit-tooltip.visible")).toContainText(
+      /Too much text|Текста слишком много|Zu viel Text/
+    );
+    await page.locator("#backTextInput").fill("valid answer");
     await page.locator("#saveCardBtn").click();
     await expect(page.locator("#createCardScreen")).toHaveClass(/is-active/);
+
+    await page.locator("#frontTextInput").fill("valid front");
+    await page.locator("#backTextInput").fill(["b1", "b2", "b3", "b4", "b5", "b6"].join("\n"));
+    await page.locator("#addExtraSideBtn").click();
+    await page.locator("[data-extra-side-input]").fill(
+      Array.from({ length: 14 }, (_, index) => `extra ${index + 1}`).join("\n")
+    );
+    await page.locator("#saveCardBtn").click();
+    await expect(page.locator("#editDeckScreen")).toHaveClass(/is-active/);
+
+    await page.locator("#editDeckCreateCardBtn").click();
+    await expect(page.locator("#createCardScreen")).toHaveClass(/is-active/);
+    await page.locator("#frontTextInput").fill("blocked extra");
+    await page.locator("#backTextInput").fill("valid answer");
+    await page.locator("#addExtraSideBtn").click();
+    await page.locator("[data-extra-side-input]").fill(
+      Array.from({ length: 15 }, (_, index) => `extra ${index + 1}`).join("\n")
+    );
+    await page.locator("#saveCardBtn").click();
+    await expect(page.locator("#createCardScreen")).toHaveClass(/is-active/);
+    await expect(page.locator("[data-extra-side-input]")).toHaveAttribute("aria-invalid", "true");
+    await expect(page.locator(".field-limit-tooltip.visible")).toContainText(
+      /Too much text|Текста слишком много|Zu viel Text/
+    );
   } finally {
     await closeKarto(electronApp, userDataDir);
   }
