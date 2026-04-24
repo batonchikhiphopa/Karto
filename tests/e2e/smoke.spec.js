@@ -120,6 +120,13 @@ async function getStudyProgressEntry(page, cardId) {
   return page.evaluate((id) => window.__kartoE2E.snapshot().studyProgress[id] || null, cardId);
 }
 
+function normalizeCssValue(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+const textLimitMessagePattern =
+  /Too much text\. Please add an additional side\.|Текста слишком много, пожалуйста, добавьте дополнительную сторону\.|Zu viel Text\. Bitte füge eine zusätzliche Seite hinzu\./;
+
 async function moveStudyPointerToTopEdge(page) {
   await page.evaluate(() => {
     window.dispatchEvent(new MouseEvent("mousemove", {
@@ -399,6 +406,81 @@ test("desktop study mode: image orientation controls media layout", async () => 
   }
 });
 
+test("desktop home dark theme keeps tile hover restrained", async () => {
+  const { electronApp, page, userDataDir } = await launchKarto();
+
+  try {
+    await page.evaluate((payload) => window.__kartoE2E.importLibraryPayload(payload), {
+      schemaVersion: 2,
+      decks: [
+        {
+          id: "deck_dark_hover",
+          name: "Dark Hover",
+          cards: [
+            {
+              id: "card_dark_hover",
+              frontText: "hover front",
+              backText: "hover back",
+              image: createSvgDataUrl("HOVER", "#0f766e")
+            }
+          ]
+        }
+      ]
+    });
+
+    await page.evaluate(() => {
+      document.documentElement.dataset.theme = "dark";
+    });
+
+    const deckTile = page.locator(".deck-tile[data-deck-id='deck_dark_hover']");
+    await expect(deckTile).toBeVisible();
+    await deckTile.hover();
+    await expect(deckTile.locator(".tile-action").first()).toHaveCSS("opacity", "1");
+
+    const deckHover = await page.evaluate(() => {
+      const tile = document.querySelector(".deck-tile[data-deck-id='deck_dark_hover']");
+      const rootStyle = getComputedStyle(document.documentElement);
+      const tileStyle = getComputedStyle(tile);
+
+      return {
+        borderColor: tileStyle.borderColor,
+        borderStrong: rootStyle.getPropertyValue("--border-strong"),
+        accent: rootStyle.getPropertyValue("--accent")
+      };
+    });
+
+    expect(normalizeCssValue(deckHover.borderColor)).toBe(normalizeCssValue(deckHover.borderStrong));
+    expect(normalizeCssValue(deckHover.borderColor)).not.toBe(normalizeCssValue(deckHover.accent));
+
+    const createTile = page.locator(".create-tile");
+    await expect(createTile).toBeVisible();
+    await createTile.hover();
+
+    const createHover = await page.evaluate(() => {
+      const tile = document.querySelector(".create-tile");
+      const rootStyle = getComputedStyle(document.documentElement);
+      const tileStyle = getComputedStyle(tile);
+      const probe = document.createElement("div");
+      probe.style.color = rootStyle.getPropertyValue("--accent-bg").trim();
+      document.body.appendChild(probe);
+      const accentBg = getComputedStyle(probe).color;
+      probe.remove();
+
+      return {
+        borderColor: tileStyle.borderColor,
+        borderStrong: rootStyle.getPropertyValue("--border-strong"),
+        backgroundImage: tileStyle.backgroundImage,
+        accentBg
+      };
+    });
+
+    expect(normalizeCssValue(createHover.borderColor)).toBe(normalizeCssValue(createHover.borderStrong));
+    expect(normalizeCssValue(createHover.backgroundImage)).not.toContain(normalizeCssValue(createHover.accentBg));
+  } finally {
+    await closeKarto(electronApp, userDataDir);
+  }
+});
+
 test("desktop cards can add and study additional sides", async () => {
   const { electronApp, page, userDataDir } = await launchKarto();
 
@@ -458,9 +540,7 @@ test("desktop card form shows text limit message only after hard limit", async (
     await page.locator("#frontTextInput").fill("a".repeat(121));
     await expect(page.locator("#frontTextInput")).toHaveClass(/is-limit-error/);
     await expect(page.locator("#frontTextInput")).toHaveAttribute("aria-invalid", "true");
-    await expect(page.locator(".field-limit-tooltip.visible")).toContainText(
-      /Too much text|Текста слишком много|Zu viel Text/
-    );
+    await expect(page.locator(".field-limit-tooltip.visible")).toContainText(textLimitMessagePattern);
     await page.locator("#backTextInput").fill("valid answer");
     await page.locator("#saveCardBtn").click();
     await expect(page.locator("#createCardScreen")).toHaveClass(/is-active/);
@@ -485,9 +565,7 @@ test("desktop card form shows text limit message only after hard limit", async (
     await page.locator("#saveCardBtn").click();
     await expect(page.locator("#createCardScreen")).toHaveClass(/is-active/);
     await expect(page.locator("[data-extra-side-input]")).toHaveAttribute("aria-invalid", "true");
-    await expect(page.locator(".field-limit-tooltip.visible")).toContainText(
-      /Too much text|Текста слишком много|Zu viel Text/
-    );
+    await expect(page.locator(".field-limit-tooltip.visible")).toContainText(textLimitMessagePattern);
   } finally {
     await closeKarto(electronApp, userDataDir);
   }

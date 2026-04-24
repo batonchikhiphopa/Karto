@@ -1,6 +1,6 @@
 {
   "name": "karto",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "A local-first desktop flashcard app for focused study without accounts or cloud lock-in.",
   "author": "batonchikhiphopa",
   "license": "MIT",

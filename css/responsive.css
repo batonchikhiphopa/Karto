@@ -149,6 +149,9 @@
   }
 
   .study-card.is-layout-side .study-card-img {
+    width: auto;
+    height: auto;
+    max-width: 100%;
     max-height: min(58vh, 520px);
     border-radius: 14px;
   }
