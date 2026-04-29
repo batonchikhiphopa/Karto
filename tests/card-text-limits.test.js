@@ -30,7 +30,7 @@ function testTextMetricsUseConfiguredLimits() {
   assert.equal(answerMetrics.lineCount, 2);
   assert.equal(answerMetrics.maxLines, 6);
   assert.equal(answerMetrics.maxChars, 700);
-  assert.equal(extraMetrics.maxLines, 14);
+  assert.equal(extraMetrics.maxLines, 9);
   assert.equal(extraMetrics.maxChars, 1600);
 }
 
@@ -39,8 +39,8 @@ function testValidationBlocksEmptyAndOverLimitText() {
   assert.equal(validateCardTextValue("ok", "answer", { lineCount: 1 }).isValid, true);
   assert.equal(validateCardTextValue("six lines", "back", { lineCount: 6 }).isValid, true);
   assert.equal(validateCardTextValue("too many lines", "back", { lineCount: 7 }).isValid, false);
-  assert.equal(validateCardTextValue("fourteen lines", "extra", { lineCount: 14 }).isValid, true);
-  assert.equal(validateCardTextValue("too many extra lines", "extra", { lineCount: 15 }).isValid, false);
+  assert.equal(validateCardTextValue("fourteen lines", "extra", { lineCount: 9 }).isValid, true);
+  assert.equal(validateCardTextValue("too many extra lines", "extra", { lineCount: 10 }).isValid, false);
   assert.equal(validateCardTextValue("x".repeat(1600), "extra", { lineCount: 1 }).isValid, true);
   assert.equal(validateCardTextValue("x".repeat(1601), "extra", { lineCount: 1 }).isValid, false);
   assert.equal(validateCardTextValue("front", "front", { lineCount: 3 }).isValid, false);

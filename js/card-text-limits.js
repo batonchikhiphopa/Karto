@@ -22,8 +22,8 @@
   const EXTRA_TEXT_LIMIT = Object.freeze({
     hardChars: 1600,
     softChars: 1600,
-    hardLines: 14,
-    softLines: 14
+    hardLines: 9,
+    softLines: 9
   });
 
   const CARD_TEXT_LIMITS = Object.freeze({

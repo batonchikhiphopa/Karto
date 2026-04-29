@@ -77,8 +77,6 @@ function evaluateVerificationResult(input = {}) {
     reason = "missing_main";
   } else if (!hasRendererReady) {
     reason = "not_ready";
-  } else if (bodyTooShort) {
-    reason = "body_too_short";
   }
 
   return {

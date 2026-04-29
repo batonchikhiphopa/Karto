@@ -15,10 +15,10 @@
 
 html[data-theme="dark"] .deck-grid {
   --deck-tile-hover-border: var(--border-strong);
-  --deck-tile-hover-shadow: 0 20px 44px rgba(0, 0, 0, 0.24);
+  --deck-tile-hover-shadow: var(--shadow-sm);
   --create-tile-hover-border: var(--border-strong);
   --create-tile-hover-bg: linear-gradient(180deg, var(--surface-2), var(--surface-3));
-  --create-tile-hover-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+  --create-tile-hover-shadow: var(--shadow-sm);
 }
 
 html[data-theme="dark"] .create-tile {
@@ -26,13 +26,17 @@ html[data-theme="dark"] .create-tile {
   background: linear-gradient(180deg, var(--surface-2), var(--surface-3));
 }
 
+html[data-theme="dark"] .deck-overlay {
+  display: none;
+}
+
 @media (prefers-color-scheme: dark) {
   html[data-theme="system"] .deck-grid {
     --deck-tile-hover-border: var(--border-strong);
-    --deck-tile-hover-shadow: 0 20px 44px rgba(0, 0, 0, 0.24);
+    --deck-tile-hover-shadow: var(--shadow-sm);
     --create-tile-hover-border: var(--border-strong);
     --create-tile-hover-bg: linear-gradient(180deg, var(--surface-2), var(--surface-3));
-    --create-tile-hover-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+    --create-tile-hover-shadow: var(--shadow-sm);
   }
 
   html[data-theme="system"] .create-tile {

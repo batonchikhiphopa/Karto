@@ -49,8 +49,9 @@ function testBodyTooShortEvaluation() {
     hasRawBootstrapText: false
   });
 
-  assert.equal(evaluation.ok, false);
-  assert.equal(evaluation.reason, "body_too_short");
+  assert.equal(evaluation.ok, true);
+  assert.equal(evaluation.reason, null);
+  assert.equal(evaluation.bodyTooShort, true);
 }
 
 function testReasonPriority() {

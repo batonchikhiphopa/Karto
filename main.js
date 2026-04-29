@@ -11,6 +11,14 @@ const {
 } = require("./js/main/data-bridge");
 const { configureAppSecurity } = require("./js/main/security");
 const { createWindowPreferenceStore } = require("./js/main/window-preferences");
+const {
+  createErrorHtml,
+  escapeLogValue,
+  formatErrorDetails
+} = require("./js/main/error-page");
+const { createDesktopFrontendCacheCleaner } = require("./js/main/frontend-cache");
+const { createStartupMetricsTracker } = require("./js/main/startup-metrics");
+const { createStartupRuntime } = require("./js/main/startup-runtime");
 const { createSqliteRepository } = require("./js/sqlite-repository");
 const {
   STARTUP_VERIFY_TIMEOUT_MS,
@@ -53,12 +61,10 @@ let mainWindow = null;
 let appWindow = null;
 let isQuitting = false;
 let shutdownPromise = null;
-let desktopFrontendCacheCleanupPromise = null;
 let startupPhase = STARTUP_PHASES.IDLE;
 let startupSequencePromise = null;
 let startupAttemptPromise = null;
 let startupAttemptToken = 0;
-let startupMetrics = null;
 let startupFailurePromise = null;
 const dataRepositoryManager = createDataRepositoryManager({
   createRepository: (options) => createSqliteRepository({ ...options, nativeImage }),
@@ -81,163 +87,27 @@ configureAppSecurity({
   getAppBaseUrl: () => baseUrl
 });
 
-async function clearDesktopFrontendCaches(origin = null) {
-  if (desktopFrontendCacheCleanupPromise) {
-    return desktopFrontendCacheCleanupPromise;
-  }
-
-  desktopFrontendCacheCleanupPromise = (async () => {
-    const targetSession = session.defaultSession;
-
-    if (!targetSession) {
-      return;
-    }
-
-    try {
-      await targetSession.clearCache();
-      if (origin) {
-        await targetSession.clearStorageData({
-          origin,
-          storages: [
-            ["service", "workers"].join(""),
-            "cachestorage"
-          ]
-        });
-      }
-    } catch (error) {
-      console.error("[karto] Failed to clear desktop frontend caches:", error);
-    }
-  })();
-
-  return desktopFrontendCacheCleanupPromise;
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function escapeLogValue(value) {
-  return String(value || "")
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, "\\\"")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function formatErrorDetails(error) {
-  if (!error) return "Unknown error";
-  if (error.stack) return error.stack;
-  if (error.message) return error.message;
-  return String(error);
-}
-
-function createErrorHtml(title, details) {
-  const safeTitle = escapeHtml(title);
-  const safeDetails = escapeHtml(details).replace(/\r?\n/g, "<br>");
-
-  return `<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Karto — ошибка запуска</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      font-family: "Segoe UI", system-ui, sans-serif;
-      background: #14171c;
-      color: #f5f7fb;
-    }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      background:
-        radial-gradient(circle at top, rgba(81, 135, 255, 0.24), transparent 45%),
-        linear-gradient(180deg, #171b22 0%, #0f1217 100%);
-    }
-    main {
-      width: min(720px, calc(100vw - 48px));
-      padding: 28px 30px;
-      border-radius: 20px;
-      background: rgba(19, 24, 32, 0.92);
-      box-shadow: 0 24px 72px rgba(0, 0, 0, 0.38);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    h1 {
-      margin: 0 0 12px;
-      font-size: 28px;
-      line-height: 1.2;
-    }
-    p {
-      margin: 0 0 20px;
-      color: rgba(245, 247, 251, 0.75);
-      font-size: 15px;
-      line-height: 1.6;
-    }
-    pre {
-      margin: 0;
-      padding: 18px;
-      border-radius: 14px;
-      background: rgba(7, 10, 14, 0.72);
-      color: #d6def0;
-      font-size: 13px;
-      line-height: 1.5;
-      overflow: auto;
-      white-space: pre-wrap;
-      word-break: break-word;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-    }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>${safeTitle}</h1>
-    <p>Karto не смог открыть встроенный интерфейс. Подробности ошибки ниже.</p>
-    <pre>${safeDetails}</pre>
-  </main>
-</body>
-</html>`;
-}
-
-function beginStartupMetrics() {
-  startupMetrics = {
-    startedAt: Date.now(),
-    checkpoints: []
-  };
-}
-
-function recordStartupCheckpoint(name) {
-  if (!startupMetrics) {
-    return;
-  }
-
-  startupMetrics.checkpoints.push({
-    name,
-    elapsedMs: Date.now() - startupMetrics.startedAt
-  });
-}
-
-function formatStartupCheckpointSummary() {
-  if (!startupMetrics || startupMetrics.checkpoints.length === 0) {
-    return "";
-  }
-
-  return startupMetrics.checkpoints
-    .map((checkpoint) => `${checkpoint.name}:${checkpoint.elapsedMs}`)
-    .join(",");
-}
-
-function clearStartupMetrics() {
-  startupMetrics = null;
-}
+const clearDesktopFrontendCaches = createDesktopFrontendCacheCleaner(session);
+const {
+  beginStartupMetrics,
+  clearStartupMetrics,
+  formatStartupCheckpointSummary,
+  recordStartupCheckpoint
+} = createStartupMetricsTracker();
+const {
+  createStartupVerificationError,
+  getActiveWebContents,
+  runVerificationAttempt,
+  stopPendingNavigation
+} = createStartupRuntime({
+  STARTUP_RENDERER_POLL_INTERVAL_MS,
+  STARTUP_RENDERER_SCRIPT,
+  STARTUP_VERIFY_TIMEOUT_MS,
+  evaluateVerificationResult,
+  formatFailedAttemptLog,
+  makePreview,
+  recordStartupCheckpoint
+});
 
 function getVisibleWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -471,331 +341,6 @@ async function showVerifiedWindowError(title, error) {
 
   dialog.showErrorBox(`Karto — ${title}`, details);
   return null;
-}
-
-function waitWithinDeadline(promise, deadlineAt) {
-  const remainingMs = deadlineAt - Date.now();
-  if (remainingMs <= 0) {
-    return Promise.resolve({ timedOut: true });
-  }
-
-  let timerId = null;
-
-  return Promise.race([
-    Promise.resolve(promise)
-      .then((value) => ({ value }))
-      .catch((error) => ({ error })),
-    new Promise((resolve) => {
-      timerId = setTimeout(() => {
-        timerId = null;
-        resolve({ timedOut: true });
-      }, remainingMs);
-    })
-  ]).finally(() => {
-    if (timerId !== null) {
-      clearTimeout(timerId);
-    }
-  });
-}
-
-function wait(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function getActiveWebContents(window) {
-  if (!window || window.isDestroyed()) {
-    return null;
-  }
-
-  try {
-    const contents = window.webContents;
-    return contents && !contents.isDestroyed() ? contents : null;
-  } catch {
-    return null;
-  }
-}
-
-function stopPendingNavigation(window) {
-  const webContents = getActiveWebContents(window);
-  if (!webContents) {
-    return;
-  }
-
-  try {
-    if (webContents.isLoading()) {
-      webContents.stop();
-    }
-  } catch {
-    // The retry path should not fail just because a timed-out load cannot be stopped.
-  }
-}
-
-function discardStartupWindow(window) {
-  if (!window || window.isDestroyed()) {
-    return;
-  }
-
-  if (appWindow === window) {
-    appWindow = null;
-  }
-
-  if (mainWindow === window) {
-    mainWindow = null;
-  }
-
-  stopPendingNavigation(window);
-
-  try {
-    window.destroy();
-  } catch {
-    // A failed startup window should not block a fresh retry window.
-  }
-}
-
-function createMainFrameAttemptWatcher(window, action, attemptLabel) {
-  const webContents = getActiveWebContents(window);
-  let cleanup = () => {};
-  let cancel = () => {};
-
-  const promise = new Promise((resolve) => {
-    let settled = false;
-
-    if (!webContents) {
-      resolve({
-        kind: "navigation_error",
-        error: new Error("Startup window was destroyed before navigation began.")
-      });
-      return;
-    }
-
-    const finish = (outcome) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      cleanup();
-      resolve(outcome);
-    };
-
-    cancel = () => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      cleanup();
-    };
-
-    const handleDidFrameFinishLoad = (_event, isMainFrame) => {
-      if (!isMainFrame) {
-        return;
-      }
-
-      recordStartupCheckpoint(`${attemptLabel}_did_finish_load`);
-      finish({ kind: "loaded" });
-    };
-
-    const handleDidFailLoad = (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-      if (!isMainFrame) {
-        return;
-      }
-
-      finish({
-        kind: "navigation_error",
-        error: new Error(
-          `Не удалось загрузить ${validatedURL || baseUrl || "главное окно"} (${errorCode}: ${errorDescription})`
-        )
-      });
-    };
-
-    cleanup = () => {
-      if (!webContents || webContents.isDestroyed()) {
-        return;
-      }
-
-      webContents.removeListener("did-frame-finish-load", handleDidFrameFinishLoad);
-      webContents.removeListener("did-fail-load", handleDidFailLoad);
-    };
-
-    webContents.on("did-frame-finish-load", handleDidFrameFinishLoad);
-    webContents.on("did-fail-load", handleDidFailLoad);
-
-    recordStartupCheckpoint(`${attemptLabel}_load_start`);
-
-    try {
-      const actionResult = action();
-      if (actionResult && typeof actionResult.then === "function") {
-        actionResult.catch((error) => {
-          finish({
-            kind: "navigation_error",
-            error
-          });
-        });
-      }
-    } catch (error) {
-      finish({
-        kind: "navigation_error",
-        error
-      });
-    }
-  });
-
-  return {
-    cancel,
-    cleanup,
-    promise
-  };
-}
-
-async function runRendererVerificationPolling(window, deadlineAt) {
-  let lastRendererResult = null;
-
-  while (Date.now() < deadlineAt) {
-    const webContents = getActiveWebContents(window);
-    if (!webContents) {
-      return evaluateVerificationResult({
-        rendererError: "Startup window was destroyed before renderer verification completed."
-      });
-    }
-
-    let scriptPromise;
-    try {
-      scriptPromise = webContents.executeJavaScript(STARTUP_RENDERER_SCRIPT);
-    } catch (error) {
-      return evaluateVerificationResult({
-        rendererError: formatErrorDetails(error)
-      });
-    }
-
-    const rendererOutcome = await waitWithinDeadline(scriptPromise, deadlineAt);
-
-    if (rendererOutcome.timedOut) {
-      return evaluateVerificationResult({
-        ...(lastRendererResult || {}),
-        timeout: true
-      });
-    }
-
-    if (rendererOutcome.error) {
-      return evaluateVerificationResult({
-        ...(lastRendererResult || {}),
-        rendererError: formatErrorDetails(rendererOutcome.error)
-      });
-    }
-
-    lastRendererResult = rendererOutcome.value || {};
-    const evaluation = evaluateVerificationResult(lastRendererResult);
-
-    if (evaluation.ok || evaluation.reason !== "not_ready") {
-      return evaluation;
-    }
-
-    const remainingMs = deadlineAt - Date.now();
-    if (remainingMs <= 0) {
-      break;
-    }
-
-    await wait(Math.min(STARTUP_RENDERER_POLL_INTERVAL_MS, remainingMs));
-  }
-
-  return evaluateVerificationResult({
-    ...(lastRendererResult || {}),
-    timeout: true
-  });
-}
-
-async function runVerificationAttempt(window, attemptNumber, action, url) {
-  if (startupAttemptPromise) {
-    throw new Error("Startup verification attempt is already running.");
-  }
-
-  const attemptLabel = `attempt${attemptNumber}`;
-  const phase = attemptNumber === 1 ? STARTUP_PHASES.ATTEMPT1 : STARTUP_PHASES.ATTEMPT2;
-  const currentAttemptToken = ++startupAttemptToken;
-  startupPhase = phase;
-  recordStartupCheckpoint(`${attemptLabel}_start`);
-
-  startupAttemptPromise = (async () => {
-    const startedAt = Date.now();
-    const deadlineAt = startedAt + STARTUP_VERIFY_TIMEOUT_MS;
-    const watcher = createMainFrameAttemptWatcher(window, action, attemptLabel);
-    let evaluation;
-
-    const navigationOutcome = await waitWithinDeadline(watcher.promise, deadlineAt);
-
-    if (navigationOutcome.timedOut) {
-      watcher.cancel();
-      stopPendingNavigation(window);
-      evaluation = evaluateVerificationResult({ timeout: true });
-    } else if (navigationOutcome.error) {
-      watcher.cancel();
-      evaluation = evaluateVerificationResult({
-        navigationError: formatErrorDetails(navigationOutcome.error)
-      });
-    } else if (navigationOutcome.value.kind === "navigation_error") {
-      evaluation = evaluateVerificationResult({
-        navigationError: formatErrorDetails(navigationOutcome.value.error)
-      });
-    } else {
-      evaluation = await runRendererVerificationPolling(window, deadlineAt);
-    }
-
-    recordStartupCheckpoint(`${attemptLabel}_done`);
-
-    if (!evaluation.ok && currentAttemptToken === startupAttemptToken) {
-      const failedAttemptLog = formatFailedAttemptLog({
-        attempt: attemptNumber,
-        elapsedMs: Date.now() - startedAt,
-        url,
-        evaluation
-      });
-      const checkpointSummary = formatStartupCheckpointSummary();
-
-      console.error(
-        checkpointSummary
-          ? `${failedAttemptLog} checkpoints="${escapeLogValue(checkpointSummary)}"`
-          : failedAttemptLog
-      );
-    }
-
-    return evaluation;
-  })().finally(() => {
-    startupAttemptPromise = null;
-  });
-
-  return startupAttemptPromise;
-}
-
-function createStartupVerificationError(evaluations, url) {
-  const lines = [`Startup verification failed for ${url}.`];
-
-  evaluations.forEach((evaluation, index) => {
-    lines.push(
-      `Attempt ${index + 1}: ${evaluation.reason || "unknown"} ` +
-      `(shell=${evaluation.hasAppShell ? 1 : 0}, ` +
-      `main=${evaluation.hasAppMain ? 1 : 0}, ` +
-      `ready=${evaluation.hasRendererReady ? 1 : 0}, ` +
-      `raw_bootstrap=${evaluation.hasRawBootstrapText ? 1 : 0}, ` +
-      `preview="${evaluation.preview}")`
-    );
-
-    if (evaluation.navigationError) {
-      lines.push(`navigation_error: ${evaluation.navigationError}`);
-    }
-
-    if (evaluation.rendererError) {
-      lines.push(`renderer_error: ${evaluation.rendererError}`);
-    }
-
-    if (evaluation.rendererStartupError) {
-      lines.push(`renderer_startup_error: ${evaluation.rendererStartupError}`);
-    }
-  });
-
-  return new Error(lines.join("\n"));
 }
 
 function revealVerifiedAppWindow(window) {
