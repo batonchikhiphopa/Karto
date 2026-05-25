@@ -5,6 +5,9 @@ const {
   normalizeExtraSides
 } = require("../data-model");
 const {
+  normalizeStudyProgressEntry: normalizeStudyEngineProgressEntry
+} = require("../study-engine");
+const {
   deriveStudyImageUrl,
   deriveTileImageUrl,
   getResizedDimensions,
@@ -27,7 +30,8 @@ const SETTINGS_KEYS = Object.freeze({
   language: "language",
   theme: "theme",
   homeGridColumns: "homeGridColumns",
-  homeMediaCache: "homeMediaCache"
+  homeMediaCache: "homeMediaCache",
+  autoGermanArticle: "autoGermanArticle"
 });
 
 function normalizeThemePreference(value) {
@@ -47,9 +51,17 @@ function normalizeLanguage(value) {
   return ["ru", "en", "de"].includes(normalized) ? normalized : null;
 }
 
+function normalizeAutoGermanArticle(value) {
+  return value !== false && value !== "false";
+}
+
 function normalizeStudyProgressEntry(entry) {
   if (!entry || typeof entry !== "object") {
     return null;
+  }
+
+  if (typeof normalizeStudyEngineProgressEntry === "function") {
+    return normalizeStudyEngineProgressEntry(entry);
   }
 
   const seenCount = Number.isFinite(Number(entry.seenCount)) ? Math.max(0, Math.round(Number(entry.seenCount))) : 0;
@@ -61,7 +73,11 @@ function normalizeStudyProgressEntry(entry) {
     seenCount,
     correctCount,
     lastResult: typeof entry.lastResult === "string" && entry.lastResult ? entry.lastResult : null,
-    lastReviewedAt: typeof entry.lastReviewedAt === "string" && entry.lastReviewedAt ? entry.lastReviewedAt : null
+    lastReviewedAt: typeof entry.lastReviewedAt === "string" && entry.lastReviewedAt ? entry.lastReviewedAt : null,
+    dueAt: typeof entry.dueAt === "string" && entry.dueAt ? entry.dueAt : null,
+    intervalDays: Number.isFinite(Number(entry.intervalDays)) ? Math.max(0, Math.round(Number(entry.intervalDays))) : 0,
+    easeFactor: Number.isFinite(Number(entry.easeFactor)) ? Math.max(1.3, Number(entry.easeFactor)) : 2.5,
+    lapseCount: Number.isFinite(Number(entry.lapseCount)) ? Math.max(0, Math.round(Number(entry.lapseCount))) : 0
   };
 }
 
@@ -91,21 +107,30 @@ function normalizeStudySession(entry) {
   }
 
   const deckId = typeof entry.deckId === "string" ? entry.deckId.trim() : "";
-  if (!deckId || !Object.prototype.hasOwnProperty.call(entry, "completedRounds")) {
+  if (!deckId) {
     return null;
   }
 
   const completedRounds = Number.isFinite(Number(entry.completedRounds))
     ? Math.max(0, Math.round(Number(entry.completedRounds)))
-    : null;
-
-  if (completedRounds === null) {
-    return null;
-  }
+    : 0;
+  const correct = Number.isFinite(Number(entry.correct)) ? Math.max(0, Math.round(Number(entry.correct))) : 0;
+  const wrong = Number.isFinite(Number(entry.wrong)) ? Math.max(0, Math.round(Number(entry.wrong))) : 0;
+  const unsure = Number.isFinite(Number(entry.unsure)) ? Math.max(0, Math.round(Number(entry.unsure))) : 0;
+  const reviewed = Math.max(
+    Number.isFinite(Number(entry.reviewed)) ? Math.max(0, Math.round(Number(entry.reviewed))) : 0,
+    correct + wrong + unsure
+  );
 
   return {
     deckId,
     deckName: typeof entry.deckName === "string" && entry.deckName ? entry.deckName : "Deck",
+    mode: typeof entry.mode === "string" && entry.mode ? entry.mode : "all",
+    reviewed,
+    correct,
+    wrong,
+    unsure,
+    percentCorrect: reviewed > 0 ? Math.round((correct / reviewed) * 100) : 0,
     completedRounds,
     finishedAt: typeof entry.finishedAt === "string" && entry.finishedAt ? entry.finishedAt : new Date().toISOString()
   };
@@ -431,6 +456,7 @@ module.exports = {
   mapCardRow,
   mergeCardWithExistingMedia,
   mergePartialDeckCards,
+  normalizeAutoGermanArticle,
   normalizeHomeGridColumns,
   normalizeHomeMediaCache,
   normalizeLanguage,

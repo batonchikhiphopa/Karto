@@ -27,9 +27,9 @@ Karto runs as an Electron desktop app with an embedded local lookup API.
 
 - **Local-first by default**: SQLite storage on your machine, no account required.
 - **Fast card creation**: front/back text, image URL or upload, image search, dictionary definitions, and translations.
-- **Focused study mode**: large card display, keyboard controls, three answer ratings, and session summaries.
+- **Focused study mode**: large card display, keyboard controls, three answer ratings, due-card scheduling, and session summaries.
 - **Language-learning helpers**: multilingual UI and optional German article auto-insert for nouns.
-- **Portable backups**: import/export decks as JSON, with CSV export for individual decks.
+- **Portable backups**: import/export decks as JSON.
 - **Desktop polish**: startup verification, window preferences, offline-friendly core workflow, and packaged builds.
 
 ## Screenshots
@@ -86,7 +86,7 @@ Without API keys, the desktop app still works. Only the related lookup features 
 
 Requirements:
 
-- [Node.js](https://nodejs.org/) 18 or newer
+- [Node.js](https://nodejs.org/) 24 or newer for development tooling
 
 Commands:
 
@@ -99,6 +99,12 @@ npm run audit      # Production dependency audit
 npm run test:all   # Full local quality gate
 ```
 
+Project planning and release notes:
+
+- [Roadmap](docs/ROADMAP.md)
+- [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [Security model](docs/SECURITY_MODEL.md)
+
 ## Build And Distribution
 
 ```bash
@@ -110,11 +116,13 @@ npm run build:linux
 
 Generated installers and unpacked bundles are written to `dist/`.
 
+CI currently runs quality checks, Electron smoke tests, and packaging verification on Windows. macOS and Linux build scripts are available for local packaging, but those artifacts should be published only after platform-specific verification.
+
 Release practice:
 
 - Commit source, tests, icons, screenshots, and build configuration.
 - Do not commit `dist/`, unpacked Electron bundles, installers, `.env`, or local databases.
-- Publish generated `.exe`, `.dmg`, and Linux artifacts through GitHub Releases.
+- Publish verified release artifacts through GitHub Releases.
 - Run `npm run test:all` before tagging a release.
 
 ## Project Structure

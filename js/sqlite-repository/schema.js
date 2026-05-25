@@ -38,7 +38,11 @@ function initializeSchema(db) {
       seen_count INTEGER NOT NULL,
       correct_count INTEGER NOT NULL,
       last_result TEXT,
-      last_reviewed_at TEXT
+      last_reviewed_at TEXT,
+      due_at TEXT,
+      interval_days INTEGER NOT NULL DEFAULT 0,
+      ease_factor REAL NOT NULL DEFAULT 2.5,
+      lapse_count INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS study_sessions (
@@ -78,6 +82,20 @@ function initializeSchema(db) {
   }
   if (!cardColumns.some((column) => column.name === "extra_sides")) {
     db.exec("ALTER TABLE cards ADD COLUMN extra_sides TEXT NOT NULL DEFAULT '[]'");
+  }
+
+  const progressColumns = db.prepare("PRAGMA table_info(study_progress)").all();
+  if (!progressColumns.some((column) => column.name === "due_at")) {
+    db.exec("ALTER TABLE study_progress ADD COLUMN due_at TEXT");
+  }
+  if (!progressColumns.some((column) => column.name === "interval_days")) {
+    db.exec("ALTER TABLE study_progress ADD COLUMN interval_days INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!progressColumns.some((column) => column.name === "ease_factor")) {
+    db.exec("ALTER TABLE study_progress ADD COLUMN ease_factor REAL NOT NULL DEFAULT 2.5");
+  }
+  if (!progressColumns.some((column) => column.name === "lapse_count")) {
+    db.exec("ALTER TABLE study_progress ADD COLUMN lapse_count INTEGER NOT NULL DEFAULT 0");
   }
 }
 

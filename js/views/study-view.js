@@ -392,9 +392,16 @@
         return;
       }
 
+      const session = ctx.state.study.session;
       ctx.store.recordStudySession({
-        deckId: ctx.state.study.session.deckId,
-        deckName: ctx.state.study.session.deckName,
+        deckId: session.deckId,
+        deckName: session.deckName,
+        mode: session.mode || "all",
+        reviewed: session.reviewed || 0,
+        correct: session.correct || 0,
+        wrong: session.wrong || 0,
+        unsure: session.unsure || 0,
+        percentCorrect: session.reviewed > 0 ? Math.round(((session.correct || 0) / session.reviewed) * 100) : 0,
         completedRounds: ctx.state.study.sessionCompletedRounds || 0,
         finishedAt: new Date().toISOString()
       });
@@ -442,7 +449,7 @@
               className: "study-card-img",
               attrs: {
                 src: visibleImageUrl,
-                alt: card.frontText || text || "Study image",
+                alt: card.frontText || text || t("study.cardImage"),
                 decoding: "async"
               }
             })
@@ -516,9 +523,20 @@
         return;
       }
 
+      const dueCards = deck.cards.filter((card) => {
+        return typeof ctx.store.isCardDueForStudy === "function"
+          ? ctx.store.isCardDueForStudy(card.id)
+          : true;
+      });
+
+      if (dueCards.length === 0) {
+        ctx.toast.info(t("alerts.noCardsForMode"));
+        return;
+      }
+
       ctx.state.studyMode = "all";
-      ctx.state.study = createStudyState({ cards: deck.cards }, Math.random, {
-        completedRounds: ctx.store.getCompletedRoundsForDeck(deckId),
+      ctx.state.study = createStudyState({ cards: dueCards }, Math.random, {
+        completedRounds: 0,
         preferredCardIds
       });
       resetAnswerSideIndex();

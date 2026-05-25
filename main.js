@@ -47,8 +47,6 @@ const DESKTOP_DATABASE_PATH = path.join(app.getPath("userData"), "karto.db");
 const STARTUP_PHASES = Object.freeze({
   IDLE: "idle",
   LAUNCHING: "launching",
-  ATTEMPT1: "attempt1",
-  ATTEMPT2: "attempt2",
   VERIFIED: "verified",
   FAILED: "failed"
 });
@@ -63,8 +61,6 @@ let isQuitting = false;
 let shutdownPromise = null;
 let startupPhase = STARTUP_PHASES.IDLE;
 let startupSequencePromise = null;
-let startupAttemptPromise = null;
-let startupAttemptToken = 0;
 let startupFailurePromise = null;
 const dataRepositoryManager = createDataRepositoryManager({
   createRepository: (options) => createSqliteRepository({ ...options, nativeImage }),

@@ -19,6 +19,8 @@ Include:
 
 Karto is an Electron desktop app. The renderer runs with `nodeIntegration: false`, `contextIsolation: true`, sandboxing, and a Content Security Policy. Desktop capabilities are exposed through a narrow preload bridge.
 
+The renderer CSP blocks inline scripts. It still allows inline styles because a few interaction components update element styles at runtime, and it allows `http:` / `https:` images because cards can intentionally reference user-provided image links.
+
 Optional online lookup features call third-party services only when configured and used.
 
 ## Dependency checks
@@ -34,4 +36,3 @@ The production audit is part of the full local gate:
 ```bash
 npm run test:all
 ```
-

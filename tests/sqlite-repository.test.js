@@ -268,6 +268,7 @@ function testSettingsProgressAndSessionPersistence() {
     repository.saveSetting("theme", "dark");
     repository.saveSetting("language", "de");
     repository.saveSetting("homeGridColumns", "3");
+    repository.saveSetting("autoGermanArticle", false);
     repository.saveSetting("homeMediaCache", {
       deck_1: {
         signature: "sig-1",
@@ -279,10 +280,17 @@ function testSettingsProgressAndSessionPersistence() {
     const progress = repository.recordStudyAnswer("card_1", "correct");
     assert.equal(progress.seenCount, 1);
     assert.equal(progress.correctCount, 1);
+    assert.equal(progress.intervalDays, 1);
+    assert.equal(progress.easeFactor, 2.6);
+    assert.match(progress.dueAt, /^\d{4}-\d{2}-\d{2}T/);
 
     const sessions = repository.recordStudySession({
       deckId: "deck_1",
       deckName: "Deck 1",
+      reviewed: 3,
+      correct: 2,
+      wrong: 1,
+      unsure: 0,
       completedRounds: 2,
       finishedAt: "2026-04-09T12:00:00.000Z"
     });
@@ -293,13 +301,19 @@ function testSettingsProgressAndSessionPersistence() {
     assert.equal(appData.themePreference, "dark");
     assert.equal(appData.languagePreference, "de");
     assert.equal(appData.homeGridColumns, "3");
+    assert.equal(appData.autoGermanArticle, false);
     assert.deepEqual(appData.homeMediaCache.deck_1, {
       signature: "sig-1",
       images: ["https://example.com/thumb.jpg"],
       updatedAt: "2026-04-15T10:00:00.000Z"
     });
     assert.equal(appData.studyProgress.card_1.correctCount, 1);
+    assert.equal(appData.studyProgress.card_1.intervalDays, 1);
     assert.equal(appData.studySessions[0].deckName, "Deck 1");
+    assert.equal(appData.studySessions[0].reviewed, 3);
+    assert.equal(appData.studySessions[0].correct, 2);
+    assert.equal(appData.studySessions[0].wrong, 1);
+    assert.equal(appData.studySessions[0].percentCorrect, 67);
     assert.equal(appData.studySessions[0].completedRounds, 2);
   });
 }
@@ -370,6 +384,7 @@ function testRestoreAppStateSnapshot() {
       languagePreference: "de",
       themePreference: "dark",
       homeGridColumns: "2",
+      autoGermanArticle: false,
       homeMediaCache: {
         deck_restore: {
           signature: "sig-restore",
@@ -377,15 +392,25 @@ function testRestoreAppStateSnapshot() {
           updatedAt: "2026-04-15T12:00:00.000Z"
         }
       },
-      studyProgress: {},
+      studyProgress: {
+        card_legacy: {
+          seenCount: 2,
+          correctCount: 1,
+          lastResult: "correct",
+          lastReviewedAt: "2026-04-15T12:00:00.000Z"
+        }
+      },
       studySessions: []
     });
 
     assert.equal(restored.decks.length, 1);
     assert.equal(restored.themePreference, "dark");
     assert.equal(restored.homeGridColumns, "2");
+    assert.equal(restored.autoGermanArticle, false);
     assert.equal(restored.homeMediaCache.deck_restore.signature, "sig-restore");
     assert.equal(restored.languagePreference, "de");
+    assert.equal(restored.studyProgress.card_legacy.dueAt, null);
+    assert.equal(restored.studyProgress.card_legacy.intervalDays, 0);
   });
 }
 

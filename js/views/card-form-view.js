@@ -1,28 +1,7 @@
 (function(root) {
   const Karto = root.Karto || (root.Karto = {});
-
-  const DEFINITION_SOURCES = {
-    en: {
-      labelKey: "cardForm.dictLangEn",
-      sourceLabel: "dictionaryapi.dev"
-    },
-    de: {
-      labelKey: "cardForm.dictLangDe",
-      sourceLabel: "DWDS"
-    },
-    ru: {
-      labelKey: "cardForm.dictLangRu",
-      sourceLabel: "Wiktionary"
-    }
-  };
-
-  const TRANSLATION_TARGETS = {
-    en: { labelKey: "cardForm.dictLangEn" },
-    de: { labelKey: "cardForm.dictLangDe" },
-    ru: { labelKey: "cardForm.dictLangRu" }
-  };
-  Karto.CARD_FORM_DEFINITION_SOURCES = DEFINITION_SOURCES;
-  Karto.CARD_FORM_TRANSLATION_TARGETS = TRANSLATION_TARGETS;
+  const DEFINITION_SOURCES = Karto.CARD_FORM_DEFINITION_SOURCES;
+  const TRANSLATION_TARGETS = Karto.CARD_FORM_TRANSLATION_TARGETS;
 
   function createCardFormView(ctx) {
     const frontInput = document.getElementById("frontTextInput");
@@ -56,10 +35,6 @@
 
     function normalizeSide(value) {
       return value === "front" ? "front" : "back";
-    }
-
-    function getLanguageCode(lang) {
-      return String(lang || "").toUpperCase();
     }
 
     const {
@@ -105,11 +80,13 @@
       backInput,
       ctx,
       definitionControl,
+      definitionIndicatorBtn,
       definitionMenu,
       definitionSelectionLabel,
       frontInput,
       getDefaultLanguage: resolveDefaultLookupLanguage,
       translationControl,
+      translationIndicatorBtn,
       translationMenu,
       translationSelectionLabel
     });
@@ -303,9 +280,7 @@
     bindLimitField(backInput, "back");
     lookupController.bind({
       definitionBtn,
-      definitionIndicatorBtn,
-      translateBtn,
-      translationIndicatorBtn
+      translateBtn
     });
     imageController.bind({
       searchButton: frontSearchImagesBtn,
@@ -318,19 +293,6 @@
         }
       });
     });
-    root.document.addEventListener("click", (event) => {
-      if (
-        event.target.closest("#definitionIndicatorBtn") ||
-        event.target.closest("#translationIndicatorBtn") ||
-        event.target.closest("#getDefinitionMenu") ||
-        event.target.closest("#translateMenu")
-      ) {
-        return;
-      }
-
-      lookupController.closeMenus();
-    });
-
     return {
       open,
       navigateBack,

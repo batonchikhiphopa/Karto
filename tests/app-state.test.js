@@ -1,4 +1,9 @@
 const assert = require("node:assert/strict");
+const {
+  isStudyProgressDue,
+  normalizeStudyProgressEntry,
+  scheduleStudyProgressAnswer
+} = require("../js/study-engine.js");
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -63,6 +68,9 @@ function createDesktopApi(initialData = {}, options = {}) {
     },
     recordStudyAnswerSync(cardId, result) {
       calls.answers.push([cardId, result]);
+      const nextEntry = scheduleStudyProgressAnswer(appData.studyProgress[cardId], result, "2026-04-15T12:00:00.000Z");
+      appData.studyProgress[cardId] = nextEntry;
+      return clone(nextEntry);
     },
     recordStudySessionSync(summary) {
       calls.sessions.push(clone(summary));
@@ -117,6 +125,9 @@ function withMockedAppStateRuntime(options, run) {
     "resolveInitialLanguage",
     "resolveNavigatorLanguage",
     "normalizeLanguage",
+    "normalizeStudyProgressEntry",
+    "scheduleStudyProgressAnswer",
+    "isStudyProgressDue",
     "navigator",
     "addEventListener",
     "clearTimeout",
@@ -154,6 +165,9 @@ function withMockedAppStateRuntime(options, run) {
     const normalized = value.trim().toLowerCase().split(/[-_]/)[0];
     return ["ru", "en", "de"].includes(normalized) ? normalized : null;
   };
+  globalThis.normalizeStudyProgressEntry = normalizeStudyProgressEntry;
+  globalThis.scheduleStudyProgressAnswer = scheduleStudyProgressAnswer;
+  globalThis.isStudyProgressDue = isStudyProgressDue;
   globalThis.navigator = { language: "en" };
   globalThis.addEventListener = () => {};
   globalThis.clearTimeout = clearTimeout;
@@ -241,6 +255,23 @@ function testDesktopHomeGridColumnsPersistToSettings() {
   });
 }
 
+function testDesktopAutoGermanArticleLoadsAndPersistsToSettings() {
+  withMockedAppStateRuntime({
+    appData: {
+      autoGermanArticle: false
+    }
+  }, ({ createAppState, calls }) => {
+    const store = createAppState();
+    store.load();
+
+    assert.equal(store.state.autoGermanArticle, false);
+
+    store.setAutoGermanArticle(true);
+    assert.equal(store.state.autoGermanArticle, true);
+    assert.deepEqual(calls.settings.at(-1), ["autoGermanArticle", true]);
+  });
+}
+
 function testRoundHistoryDropsOldEntriesAndLimitsPerDeck() {
   const studySessions = [
     {
@@ -299,6 +330,8 @@ function testStudyProgressEntryCanBeRestoredAndDeleted() {
     assert.equal(previousEntry.seenCount, 1);
     assert.equal(previousEntry.correctCount, 1);
     assert.equal(previousEntry.lastResult, "correct");
+    assert.equal(previousEntry.intervalDays, 1);
+    assert.equal(previousEntry.dueAt, "2026-04-16T12:00:00.000Z");
     assert.deepEqual(calls.answers, [["card_1", "correct"]]);
 
     store.recordStudyAnswer("card_1", "wrong");
@@ -450,6 +483,7 @@ function testDesktopPersistenceDelegatesSnapshotAndLanguageSaves() {
 (async () => {
   testCreateAppStateRequiresDesktopPersistence();
   testDesktopHomeGridColumnsPersistToSettings();
+  testDesktopAutoGermanArticleLoadsAndPersistsToSettings();
   testRoundHistoryDropsOldEntriesAndLimitsPerDeck();
   testStudyProgressEntryCanBeRestoredAndDeleted();
   testHomeMediaCachePersistsLoadsAndPrunes();

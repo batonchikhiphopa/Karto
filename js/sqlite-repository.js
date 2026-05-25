@@ -3,8 +3,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const Database = require("better-sqlite3");
-
 const {
   createCard: createCardModel,
   createDeck: createDeckModel,
@@ -12,6 +10,7 @@ const {
   normalizeStoredDecks
 } = require("./data-model");
 const {
+  scheduleStudyProgressAnswer,
   shuffleCards
 } = require("./study-engine");
 const { initializeSchema } = require("./sqlite-repository/schema");
@@ -29,6 +28,7 @@ const {
   mapCardRow,
   mergeCardWithExistingMedia,
   mergePartialDeckCards,
+  normalizeAutoGermanArticle,
   normalizeHomeGridColumns,
   normalizeHomeMediaCache,
   normalizeLanguage,
@@ -40,9 +40,62 @@ const {
   normalizeThemePreference
 } = require("./sqlite-repository/helpers");
 
+function createNodeSqliteDatabase(dbPath) {
+  let sqlite;
+  try {
+    sqlite = require("node:sqlite");
+  } catch (error) {
+    throw createRepositoryError(
+      "Karto needs Electron 42 or Node 24+ for the built-in SQLite driver.",
+      error
+    );
+  }
+
+  const database = new sqlite.DatabaseSync(dbPath);
+
+  return {
+    close() {
+      database.close();
+    },
+    exec(sql) {
+      return database.exec(sql);
+    },
+    pragma(statement) {
+      const sql = `PRAGMA ${statement}`;
+      if (String(statement).includes("=")) {
+        database.exec(sql);
+        return [];
+      }
+
+      return database.prepare(sql).all();
+    },
+    prepare(sql) {
+      return database.prepare(sql);
+    },
+    transaction(callback) {
+      return (...args) => {
+        let transactionStarted = false;
+        try {
+          database.exec("BEGIN");
+          transactionStarted = true;
+          const result = callback(...args);
+          database.exec("COMMIT");
+          transactionStarted = false;
+          return result;
+        } catch (error) {
+          if (transactionStarted) {
+            database.exec("ROLLBACK");
+          }
+          throw error;
+        }
+      };
+    }
+  };
+}
+
 function createSqliteRepository(options = {}) {
   const dbPath = options.dbPath;
-  const DatabaseCtor = options.DatabaseCtor || Database;
+  const DatabaseCtor = options.DatabaseCtor;
   const randomFn = typeof options.randomFn === "function" ? options.randomFn : Math.random;
 
   if (typeof dbPath !== "string" || !dbPath.trim()) {
@@ -53,7 +106,7 @@ function createSqliteRepository(options = {}) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   }
 
-  const db = new DatabaseCtor(dbPath);
+  const db = DatabaseCtor ? new DatabaseCtor(dbPath) : createNodeSqliteDatabase(dbPath);
   initializeSchema(db);
 
   const statements = createStatements(db, {
@@ -169,6 +222,7 @@ function createSqliteRepository(options = {}) {
       languagePreference: normalizeLanguage(getSetting(SETTINGS_KEYS.language)),
       themePreference: normalizeThemePreference(getSetting(SETTINGS_KEYS.theme)),
       homeGridColumns: normalizeHomeGridColumns(getSetting(SETTINGS_KEYS.homeGridColumns)),
+      autoGermanArticle: normalizeAutoGermanArticle(getSetting(SETTINGS_KEYS.autoGermanArticle)),
       homeMediaCache: normalizeHomeMediaCache(getSetting(SETTINGS_KEYS.homeMediaCache)),
       studyProgress: loadStudyProgress(),
       studySessions: loadStudySessions()
@@ -192,6 +246,7 @@ function createSqliteRepository(options = {}) {
       languagePreference: normalizeLanguage(getSetting(SETTINGS_KEYS.language)),
       themePreference: normalizeThemePreference(getSetting(SETTINGS_KEYS.theme)),
       homeGridColumns: normalizeHomeGridColumns(getSetting(SETTINGS_KEYS.homeGridColumns)),
+      autoGermanArticle: normalizeAutoGermanArticle(getSetting(SETTINGS_KEYS.autoGermanArticle)),
       homeMediaCache: normalizeHomeMediaCache(getSetting(SETTINGS_KEYS.homeMediaCache)),
       studyProgress: loadStudyProgress(),
       studySessions: loadStudySessions()
@@ -255,7 +310,11 @@ function createSqliteRepository(options = {}) {
         entry.seenCount,
         entry.correctCount,
         entry.lastResult,
-        entry.lastReviewedAt
+        entry.lastReviewedAt,
+        entry.dueAt,
+        entry.intervalDays,
+        entry.easeFactor,
+        entry.lapseCount
       );
     });
   }
@@ -269,12 +328,12 @@ function createSqliteRepository(options = {}) {
         createId("session"),
         session.deckId,
         session.deckName,
-        "all",
-        0,
-        0,
-        0,
-        0,
-        0,
+        session.mode,
+        session.reviewed,
+        session.correct,
+        session.wrong,
+        session.unsure,
+        session.percentCorrect,
         session.finishedAt,
         now,
         session.completedRounds
@@ -357,6 +416,8 @@ function createSqliteRepository(options = {}) {
         return setSetting(key, normalizeHomeGridColumns(value));
       case SETTINGS_KEYS.homeMediaCache:
         return setSetting(key, JSON.stringify(normalizeHomeMediaCache(value)));
+      case SETTINGS_KEYS.autoGermanArticle:
+        return setSetting(key, normalizeAutoGermanArticle(value));
       default:
         return setSetting(key, value);
     }
@@ -373,19 +434,18 @@ function createSqliteRepository(options = {}) {
       lastResult: null,
       lastReviewedAt: null
     };
-    const nextEntry = {
-      seenCount: existing.seenCount + 1,
-      correctCount: existing.correctCount + (result === "correct" ? 1 : 0),
-      lastResult: typeof result === "string" && result ? result : null,
-      lastReviewedAt: getNow()
-    };
+    const nextEntry = scheduleStudyProgressAnswer(existing, result, getNow());
 
     statements.insertStudyProgress.run(
       cardId,
       nextEntry.seenCount,
       nextEntry.correctCount,
       nextEntry.lastResult,
-      nextEntry.lastReviewedAt
+      nextEntry.lastReviewedAt,
+      nextEntry.dueAt,
+      nextEntry.intervalDays,
+      nextEntry.easeFactor,
+      nextEntry.lapseCount
     );
 
     return nextEntry;
@@ -402,12 +462,12 @@ function createSqliteRepository(options = {}) {
       createId("session"),
       session.deckId,
       session.deckName,
-      "all",
-      0,
-      0,
-      0,
-      0,
-      0,
+      session.mode,
+      session.reviewed,
+      session.correct,
+      session.wrong,
+      session.unsure,
+      session.percentCorrect,
       session.finishedAt,
       now,
       session.completedRounds
@@ -441,6 +501,7 @@ function createSqliteRepository(options = {}) {
       languagePreference: normalizeLanguage(snapshot.languagePreference || snapshot.language),
       themePreference: normalizeThemePreference(snapshot.themePreference),
       homeGridColumns: normalizeHomeGridColumns(snapshot.homeGridColumns),
+      autoGermanArticle: normalizeAutoGermanArticle(snapshot.autoGermanArticle),
       homeMediaCache: normalizeHomeMediaCache(snapshot.homeMediaCache),
       studyProgress: normalizeStudyProgress(snapshot.studyProgress),
       studySessions: normalizeStudySessions(snapshot.studySessions)
@@ -451,6 +512,7 @@ function createSqliteRepository(options = {}) {
     replaceStudySessionsTx(normalizedSnapshot.studySessions);
     saveSettingValue(SETTINGS_KEYS.theme, normalizedSnapshot.themePreference);
     saveSettingValue(SETTINGS_KEYS.homeGridColumns, normalizedSnapshot.homeGridColumns);
+    saveSettingValue(SETTINGS_KEYS.autoGermanArticle, normalizedSnapshot.autoGermanArticle);
     saveSettingValue(SETTINGS_KEYS.homeMediaCache, normalizedSnapshot.homeMediaCache);
 
     if (normalizedSnapshot.languagePreference) {
@@ -497,6 +559,7 @@ module.exports = {
   createSqliteRepository,
   normalizeHomeGridColumns,
   normalizeHomeMediaCache,
+  normalizeAutoGermanArticle,
   normalizeLanguage,
   normalizeStudyProgress,
   normalizeStudySessions,

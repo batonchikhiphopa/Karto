@@ -487,6 +487,6 @@
   const bootScreen = document.getElementById("bootScreen");
   if (bootScreen) {
     bootScreen.hidden = false;
-    bootScreen.textContent = "Karto could not finish loading.";
+    bootScreen.textContent = "Karto couldn't finish loading. Please restart the app.";
   }
 });

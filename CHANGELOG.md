@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.5.4
+
+### Added
+
+- Added persistent due dates, intervals, ease factors, and lapse counts for study progress.
+- Added concise roadmap, release checklist, and security-model documentation.
+
+### Changed
+
+- Updated Study to start from new or due cards while keeping the existing UI.
+- Updated session summaries so reviewed, correct, wrong, unsure, percent, and completed rounds are saved.
+- Updated Electron to the currently supported stable line.
+- Replaced the native SQLite addon with Electron's built-in SQLite driver.
+- Clarified README release and packaging claims.
+
+### Fixed
+
+- Fixed `autoGermanArticle` loading from SQLite-backed settings.
+- Fixed package metadata and static version checks for the 1.5.4 release.
+- Removed stale CSV export copy until the feature exists.
+- Removed executable inline script allowance from the renderer CSP.
+
 ## 1.5.0
 
 [Compare with 1.4.0](https://github.com/batonchikhiphopa/Karto/compare/v1.4.0...v1.5.0)

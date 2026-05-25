@@ -14,11 +14,13 @@
       backInput,
       ctx,
       definitionControl,
+      definitionIndicatorBtn,
       definitionMenu,
       definitionSelectionLabel,
       frontInput,
       getDefaultLanguage,
       translationControl,
+      translationIndicatorBtn,
       translationMenu,
       translationSelectionLabel
     } = options;
@@ -58,8 +60,8 @@
     }
 
     function closeMenus() {
-      setMenuOpen(definitionControl, definitionMenu, document.getElementById("definitionIndicatorBtn"), false);
-      setMenuOpen(translationControl, translationMenu, document.getElementById("translationIndicatorBtn"), false);
+      setMenuOpen(definitionControl, definitionMenu, definitionIndicatorBtn, false);
+      setMenuOpen(translationControl, translationMenu, translationIndicatorBtn, false);
     }
 
     function toggleMenu(control, menu, button) {
@@ -158,13 +160,13 @@
     function bind(buttons) {
       buttons.definitionBtn.addEventListener("click", (event) => fetchDefinition(event.currentTarget));
       buttons.translateBtn.addEventListener("click", (event) => translateText(event.currentTarget));
-      buttons.definitionIndicatorBtn.addEventListener("click", (event) => {
+      definitionIndicatorBtn.addEventListener("click", (event) => {
         event.stopPropagation();
-        toggleMenu(definitionControl, definitionMenu, buttons.definitionIndicatorBtn);
+        toggleMenu(definitionControl, definitionMenu, definitionIndicatorBtn);
       });
-      buttons.translationIndicatorBtn.addEventListener("click", (event) => {
+      translationIndicatorBtn.addEventListener("click", (event) => {
         event.stopPropagation();
-        toggleMenu(translationControl, translationMenu, buttons.translationIndicatorBtn);
+        toggleMenu(translationControl, translationMenu, translationIndicatorBtn);
       });
       definitionMenu.addEventListener("click", (event) => {
         event.stopPropagation();

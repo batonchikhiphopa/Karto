@@ -44,13 +44,17 @@ function createStatements(db, { maxStudySessionsPerDeck }) {
     getSetting: db.prepare("SELECT value FROM settings WHERE key = ?"),
     getStudyProgressEntry: db.prepare(`
       SELECT seen_count AS seenCount, correct_count AS correctCount,
-        last_result AS lastResult, last_reviewed_at AS lastReviewedAt
+        last_result AS lastResult, last_reviewed_at AS lastReviewedAt,
+        due_at AS dueAt, interval_days AS intervalDays,
+        ease_factor AS easeFactor, lapse_count AS lapseCount
       FROM study_progress
       WHERE card_id = ?
     `),
     getStudyProgressRows: db.prepare(`
       SELECT card_id AS cardId, seen_count AS seenCount, correct_count AS correctCount,
-        last_result AS lastResult, last_reviewed_at AS lastReviewedAt
+        last_result AS lastResult, last_reviewed_at AS lastReviewedAt,
+        due_at AS dueAt, interval_days AS intervalDays,
+        ease_factor AS easeFactor, lapse_count AS lapseCount
       FROM study_progress
     `),
     getStudySessionRows: db.prepare(`
@@ -95,13 +99,18 @@ function createStatements(db, { maxStudySessionsPerDeck }) {
     `),
     insertStudyProgress: db.prepare(`
       INSERT INTO study_progress (
-        card_id, seen_count, correct_count, last_result, last_reviewed_at
-      ) VALUES (?, ?, ?, ?, ?)
+        card_id, seen_count, correct_count, last_result, last_reviewed_at,
+        due_at, interval_days, ease_factor, lapse_count
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(card_id) DO UPDATE SET
         seen_count = excluded.seen_count,
         correct_count = excluded.correct_count,
         last_result = excluded.last_result,
-        last_reviewed_at = excluded.last_reviewed_at
+        last_reviewed_at = excluded.last_reviewed_at,
+        due_at = excluded.due_at,
+        interval_days = excluded.interval_days,
+        ease_factor = excluded.ease_factor,
+        lapse_count = excluded.lapse_count
     `),
     insertStudySession: db.prepare(`
       INSERT INTO study_sessions (

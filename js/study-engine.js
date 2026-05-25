@@ -12,9 +12,141 @@
     unsure: 2,
     correct: 3
   };
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const DEFAULT_EASE_FACTOR = 2.5;
+  const MIN_EASE_FACTOR = 1.3;
+  const MAX_EASE_FACTOR = 3;
 
   function normalizeResult(result) {
     return ["wrong", "unsure", "correct"].includes(result) ? result : "unsure";
+  }
+
+  function clampNumber(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function normalizePositiveInteger(value, fallback = 0) {
+    return Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : fallback;
+  }
+
+  function normalizeEaseFactor(value) {
+    const numericValue = Number(value);
+    const normalizedValue = Number.isFinite(numericValue) ? numericValue : DEFAULT_EASE_FACTOR;
+    return Math.round(clampNumber(normalizedValue, MIN_EASE_FACTOR, MAX_EASE_FACTOR) * 100) / 100;
+  }
+
+  function normalizeIsoDate(value) {
+    if (typeof value !== "string" || !value.trim()) {
+      return null;
+    }
+
+    const time = Date.parse(value);
+    return Number.isFinite(time) ? new Date(time).toISOString() : null;
+  }
+
+  function normalizeScheduleNow(value) {
+    const time = value instanceof Date ? value.getTime() : Date.parse(value);
+    return Number.isFinite(time) ? new Date(time) : new Date();
+  }
+
+  function normalizeStudyProgressEntry(entry) {
+    if (!entry || typeof entry !== "object") {
+      return {
+        seenCount: 0,
+        correctCount: 0,
+        lastResult: null,
+        lastReviewedAt: null,
+        dueAt: null,
+        intervalDays: 0,
+        easeFactor: DEFAULT_EASE_FACTOR,
+        lapseCount: 0
+      };
+    }
+
+    return {
+      seenCount: normalizePositiveInteger(entry.seenCount),
+      correctCount: normalizePositiveInteger(entry.correctCount),
+      lastResult: typeof entry.lastResult === "string" && entry.lastResult ? normalizeResult(entry.lastResult) : null,
+      lastReviewedAt: normalizeIsoDate(entry.lastReviewedAt),
+      dueAt: normalizeIsoDate(entry.dueAt),
+      intervalDays: normalizePositiveInteger(entry.intervalDays),
+      easeFactor: normalizeEaseFactor(entry.easeFactor),
+      lapseCount: normalizePositiveInteger(entry.lapseCount)
+    };
+  }
+
+  function getOverdueDays(entry, now) {
+    const dueAtTime = Date.parse(entry.dueAt);
+    if (!Number.isFinite(dueAtTime)) {
+      return 0;
+    }
+
+    return Math.max(0, (now.getTime() - dueAtTime) / DAY_MS);
+  }
+
+  function getNextEaseFactor(entry, result) {
+    const normalizedResult = normalizeResult(result);
+    const adjustment =
+      normalizedResult === "correct" ? 0.1 :
+      normalizedResult === "wrong" ? -0.25 :
+      -0.15;
+
+    return normalizeEaseFactor(entry.easeFactor + adjustment);
+  }
+
+  function getNextIntervalDays(entry, result, overdueDays, easeFactor) {
+    const normalizedResult = normalizeResult(result);
+    const baseInterval = Math.max(1, entry.intervalDays || 1);
+
+    if (normalizedResult === "wrong") {
+      return 1;
+    }
+
+    if (normalizedResult === "unsure") {
+      return Math.max(1, Math.round(baseInterval + overdueDays * 0.25));
+    }
+
+    if (entry.seenCount === 0 || entry.intervalDays === 0) {
+      return 1;
+    }
+
+    return Math.max(1, Math.round((baseInterval + overdueDays * 0.5) * easeFactor));
+  }
+
+  function scheduleStudyProgressAnswer(entry, result, nowValue = new Date()) {
+    const normalizedEntry = normalizeStudyProgressEntry(entry);
+    const normalizedResult = normalizeResult(result);
+    const now = normalizeScheduleNow(nowValue);
+    const nowIso = now.toISOString();
+    const easeFactor = getNextEaseFactor(normalizedEntry, normalizedResult);
+    const intervalDays = getNextIntervalDays(
+      normalizedEntry,
+      normalizedResult,
+      getOverdueDays(normalizedEntry, now),
+      easeFactor
+    );
+
+    return {
+      seenCount: normalizedEntry.seenCount + 1,
+      correctCount: normalizedEntry.correctCount + (normalizedResult === "correct" ? 1 : 0),
+      lastResult: normalizedResult,
+      lastReviewedAt: nowIso,
+      dueAt: new Date(now.getTime() + intervalDays * DAY_MS).toISOString(),
+      intervalDays,
+      easeFactor,
+      lapseCount: normalizedEntry.lapseCount + (normalizedResult === "wrong" ? 1 : 0)
+    };
+  }
+
+  function isStudyProgressDue(entry, nowValue = new Date()) {
+    const normalizedEntry = normalizeStudyProgressEntry(entry);
+    if (normalizedEntry.seenCount === 0 || !normalizedEntry.dueAt) {
+      return true;
+    }
+
+    const now = normalizeScheduleNow(nowValue);
+    const dueAtTime = Date.parse(normalizedEntry.dueAt);
+    return !Number.isFinite(dueAtTime) || dueAtTime <= now.getTime();
   }
 
   function shuffleCards(cards, randomFn = Math.random) {
@@ -150,16 +282,7 @@
   }
 
   function cloneProgressEntry(entry) {
-    if (!entry || typeof entry !== "object") {
-      return null;
-    }
-
-    return {
-      seenCount: Number.isFinite(Number(entry.seenCount)) ? Math.max(0, Math.round(Number(entry.seenCount))) : 0,
-      correctCount: Number.isFinite(Number(entry.correctCount)) ? Math.max(0, Math.round(Number(entry.correctCount))) : 0,
-      lastResult: typeof entry.lastResult === "string" && entry.lastResult ? entry.lastResult : null,
-      lastReviewedAt: typeof entry.lastReviewedAt === "string" && entry.lastReviewedAt ? entry.lastReviewedAt : null
-    };
+    return entry && typeof entry === "object" ? normalizeStudyProgressEntry(entry) : null;
   }
 
   function createUndoSnapshot(studyState) {
@@ -341,9 +464,12 @@
     getCurrentStudyCard,
     getResultDelay,
     getStudyBase,
+    isStudyProgressDue,
     movePreferredCardsToFront,
+    normalizeStudyProgressEntry,
     queuePendingStudyAnswer,
     rememberCurrentCard,
+    scheduleStudyProgressAnswer,
     scheduleCurrentCard,
     shuffleCards,
     undoStudyAnswer

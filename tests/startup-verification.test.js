@@ -103,7 +103,7 @@ function testRendererStartupErrorEvaluation() {
     hasAppMain: true,
     hasRendererReady: false,
     rendererStartupError: "database failed",
-    normalizedBodyText: "Karto could not finish loading.",
+    normalizedBodyText: "Karto couldn't finish loading. Please restart the app.",
     hasRawBootstrapText: false
   });
 
@@ -154,7 +154,7 @@ function testFailedAttemptLogIncludesStartupError() {
     hasAppMain: true,
     hasRendererReady: false,
     rendererStartupError: "line 1\n\"broken\"",
-    normalizedBodyText: "Karto could not finish loading.",
+    normalizedBodyText: "Karto couldn't finish loading. Please restart the app.",
     hasRawBootstrapText: false
   });
   const logLine = formatFailedAttemptLog({

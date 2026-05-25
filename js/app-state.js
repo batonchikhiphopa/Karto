@@ -83,6 +83,10 @@
       return null;
     }
 
+    if (typeof root.normalizeStudyProgressEntry === "function") {
+      return root.normalizeStudyProgressEntry(entry);
+    }
+
     const seenCount = Number.isFinite(Number(entry.seenCount)) ? Math.max(0, Math.round(Number(entry.seenCount))) : 0;
     const correctCount = Number.isFinite(Number(entry.correctCount))
       ? Math.max(0, Math.round(Number(entry.correctCount)))
@@ -92,7 +96,11 @@
       seenCount,
       correctCount,
       lastResult: typeof entry.lastResult === "string" && entry.lastResult ? entry.lastResult : null,
-      lastReviewedAt: typeof entry.lastReviewedAt === "string" && entry.lastReviewedAt ? entry.lastReviewedAt : null
+      lastReviewedAt: typeof entry.lastReviewedAt === "string" && entry.lastReviewedAt ? entry.lastReviewedAt : null,
+      dueAt: typeof entry.dueAt === "string" && entry.dueAt ? entry.dueAt : null,
+      intervalDays: Number.isFinite(Number(entry.intervalDays)) ? Math.max(0, Math.round(Number(entry.intervalDays))) : 0,
+      easeFactor: Number.isFinite(Number(entry.easeFactor)) ? Math.max(1.3, Number(entry.easeFactor)) : 2.5,
+      lapseCount: Number.isFinite(Number(entry.lapseCount)) ? Math.max(0, Math.round(Number(entry.lapseCount))) : 0
     };
   }
 
@@ -117,7 +125,11 @@
   }
 
   function normalizeCompletedRounds(value) {
-    return Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : null;
+    return Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : 0;
+  }
+
+  function normalizeSessionCount(value) {
+    return Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : 0;
   }
 
   function compareStudySessionsByFinishedAtDesc(left, right) {
@@ -136,18 +148,21 @@
       return null;
     }
 
-    if (!Object.prototype.hasOwnProperty.call(entry, "completedRounds")) {
-      return null;
-    }
-
     const completedRounds = normalizeCompletedRounds(entry.completedRounds);
-    if (completedRounds === null) {
-      return null;
-    }
+    const correct = normalizeSessionCount(entry.correct);
+    const wrong = normalizeSessionCount(entry.wrong);
+    const unsure = normalizeSessionCount(entry.unsure);
+    const reviewed = Math.max(normalizeSessionCount(entry.reviewed), correct + wrong + unsure);
 
     return {
       deckId,
       deckName: typeof entry.deckName === "string" && entry.deckName ? entry.deckName : "Deck",
+      mode: typeof entry.mode === "string" && entry.mode ? entry.mode : "all",
+      reviewed,
+      correct,
+      wrong,
+      unsure,
+      percentCorrect: reviewed > 0 ? Math.round((correct / reviewed) * 100) : 0,
       completedRounds,
       finishedAt: typeof entry.finishedAt === "string" && entry.finishedAt ? entry.finishedAt : new Date().toISOString()
     };
@@ -577,21 +592,21 @@
     }
 
     function recordStudyAnswer(cardId, result) {
-      const existing = state.studyProgress[cardId] || {
-        seenCount: 0,
-        correctCount: 0,
-        lastResult: null,
-        lastReviewedAt: null
-      };
-
-      state.studyProgress[cardId] = {
-        seenCount: existing.seenCount + 1,
-        correctCount: existing.correctCount + (result === "correct" ? 1 : 0),
-        lastResult: result,
-        lastReviewedAt: new Date().toISOString()
-      };
-
-      desktopPersistence.recordStudyAnswerSync(cardId, result);
+      const existing = normalizeStudyProgressEntry(state.studyProgress[cardId]);
+      const scheduledEntry = typeof root.scheduleStudyProgressAnswer === "function"
+        ? root.scheduleStudyProgressAnswer(existing, result)
+        : {
+          seenCount: (existing?.seenCount || 0) + 1,
+          correctCount: (existing?.correctCount || 0) + (result === "correct" ? 1 : 0),
+          lastResult: result,
+          lastReviewedAt: new Date().toISOString(),
+          dueAt: null,
+          intervalDays: 0,
+          easeFactor: 2.5,
+          lapseCount: existing?.lapseCount || 0
+        };
+      const persistedEntry = desktopPersistence.recordStudyAnswerSync(cardId, result);
+      state.studyProgress[cardId] = normalizeStudyProgressEntry(persistedEntry) || scheduledEntry;
     }
 
     function recordStudySession(summary) {
@@ -698,6 +713,10 @@
       persistStudyProgress,
       persistStudySessions,
       getCompletedRoundsForDeck: (deckId) => getCompletedRoundsForDeck(state.studySessions, deckId),
+      isCardDueForStudy: (cardId, now) => {
+        const entry = getStudyProgressEntry(cardId);
+        return typeof root.isStudyProgressDue === "function" ? root.isStudyProgressDue(entry, now) : true;
+      },
       setThemePreference,
       setHomeGridColumns,
       setAutoGermanArticle,
@@ -720,9 +739,4 @@
   }
 
   Karto.createAppState = createAppState;
-  Karto.MAX_ROUND_HISTORY_SESSIONS_PER_DECK = MAX_ROUND_HISTORY_SESSIONS_PER_DECK;
-  Karto.getCompletedRoundsForDeck = getCompletedRoundsForDeck;
-  Karto.normalizeLoadedStudySessions = normalizeLoadedStudySessions;
-  Karto.normalizeHomeMediaCache = normalizeHomeMediaCache;
-  Karto.normalizeHomeGridColumns = normalizeHomeGridColumns;
 })(typeof window !== "undefined" ? window : globalThis);

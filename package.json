@@ -1,6 +1,6 @@
 {
   "name": "karto",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "A local-first desktop flashcard app for focused study without accounts or cloud lock-in.",
   "author": "batonchikhiphopa",
   "license": "MIT",
@@ -37,16 +37,15 @@
     "build:linux": "electron-builder --linux"
   },
   "dependencies": {
-    "better-sqlite3": "^12.8.0",
     "cheerio": "1.0.0",
     "dotenv": "^16.0.0",
-    "express": "^4.18.0"
+    "express": "^4.22.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.59.1",
-    "electron": "^30.0.0",
-    "electron-builder": "^24.0.0",
+    "electron": "^42.2.0",
+    "electron-builder": "^26.8.1",
     "eslint": "^10.2.0",
     "globals": "^17.5.0"
   },

@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#0d1014">
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; connect-src 'self' http://127.0.0.1:* http://localhost:* https://api.unsplash.com https://api-free.deepl.com https://api.deepl.com https://api.dictionaryapi.dev https://en.wiktionary.org https://de.wiktionary.org https://ru.wiktionary.org https://www.dwds.de; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; connect-src 'self' http://127.0.0.1:* http://localhost:* https://api.unsplash.com https://api-free.deepl.com https://api.deepl.com https://api.dictionaryapi.dev https://en.wiktionary.org https://de.wiktionary.org https://ru.wiktionary.org https://www.dwds.de; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
   >
   <link rel="icon" href="logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
@@ -306,12 +306,12 @@
 
               <div class="form-label-row">
                 <label class="form-label" for="imageInput" data-i18n="cardForm.imageLabel">Image</label>
-                <div class="image-side-toggle" role="group" aria-label="Choose image side">
+                <div class="image-side-toggle" role="group" aria-label="Choose where to show the image">
                   <button
                     class="icon-btn image-side-btn"
                     id="imageSideFrontBtn"
                     type="button"
-                    aria-label="Use image on front side"
+                    aria-label="Show image on front side"
                     data-i18n-aria-label="cardForm.imageSideFront"
                     data-i18n-title="cardForm.imageSideFront"
                   >
@@ -321,7 +321,7 @@
                     class="icon-btn image-side-btn"
                     id="imageSideBackBtn"
                     type="button"
-                    aria-label="Use image on back side"
+                    aria-label="Show image on back side"
                     data-i18n-aria-label="cardForm.imageSideBack"
                     data-i18n-title="cardForm.imageSideBack"
                   >
@@ -471,7 +471,7 @@
         </button>
       </div>
 
-      <nav class="sidebar-panel" aria-label="Primary">
+      <nav class="sidebar-panel" aria-label="Main navigation">
         <button class="sidebar-link active" type="button" data-nav="homeScreen" data-i18n="nav.home">Home</button>
         <button class="sidebar-link" type="button" data-nav="libraryScreen" data-i18n="nav.library">Library</button>
         <button class="sidebar-link" type="button" data-nav="settingsScreen" data-i18n="nav.settings">Settings</button>
@@ -509,6 +509,7 @@
   <script src="js/views/home-view.js"></script>
   <script src="js/views/library-view.js"></script>
   <script src="js/views/deck-editor-view.js"></script>
+  <script src="js/views/card-form/constants.js"></script>
   <script src="js/views/card-form/text-limit-controller.js"></script>
   <script src="js/views/card-form/extra-sides-controller.js"></script>
   <script src="js/views/card-form/image-controller.js"></script>

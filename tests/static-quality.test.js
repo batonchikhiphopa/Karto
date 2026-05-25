@@ -14,6 +14,7 @@ function testRendererHasContentSecurityPolicy() {
   assert.match(indexHtml, /http-equiv="Content-Security-Policy"/);
   assert.match(indexHtml, /object-src 'none'/);
   assert.match(indexHtml, /frame-ancestors 'none'/);
+  assert.doesNotMatch(indexHtml, /script-src[^;]*'unsafe-inline'/);
 }
 
 function testMainProcessRegistersSecurityHardening() {
@@ -137,7 +138,7 @@ function testPackageVersionMetadataAndScripts() {
   const pkg = JSON.parse(readProjectFile("package.json"));
   const lock = JSON.parse(readProjectFile("package-lock.json"));
 
-  assert.equal(pkg.version, "1.5.2");
+  assert.equal(pkg.version, "1.5.4");
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[""].version, pkg.version);
   assert.equal(pkg.license, "MIT");
@@ -147,6 +148,14 @@ function testPackageVersionMetadataAndScripts() {
   assert.ok(pkg.scripts.audit);
   assert.ok(pkg.scripts["test:all"]);
   assert.equal(Object.hasOwn(pkg.scripts, ["dev", "server"].join("-")), false);
+}
+
+function testStaleCsvCopyIsRemoved() {
+  const readme = readProjectFile("README.md");
+  const i18n = readProjectFile("i18n.js");
+
+  assert.equal(readme.includes("CSV export"), false);
+  assert.equal(i18n.includes("exportCsv"), false);
 }
 
 testRendererHasContentSecurityPolicy();
@@ -162,5 +171,6 @@ testHomeSlideshowDoesNotClearImageSources();
 testHomeTilesUseKeyedEagerRendering();
 testStudyViewUsesWindowedInvisibleMediaPreparation();
 testPackageVersionMetadataAndScripts();
+testStaleCsvCopyIsRemoved();
 
 console.log("static quality tests passed");

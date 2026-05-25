@@ -1,28 +1,13 @@
 const {
-  addCard,
   closeKarto,
-  createDeck,
   createSvgDataUrl,
-  dispatchStudyEdgeClick,
   expect,
   fs,
-  expectStudyCardOnNextFront,
-  getCurrentStudyRuleCard,
-  getStudyCardText,
-  getStudyProgressEntry,
-  getStudyRuleCardByFrontText,
   hasVisibleKartoWindow,
   launchKarto,
-  moveStudyPointerToTopEdge,
-  normalizeCssValue,
   os,
   path,
-  projectRoot,
-  startStudyRuleDeck,
-  studyRuleCards,
-  test,
-  textLimitMessagePattern,
-  writeSvgImageFile
+  test
 } = require("./helpers/karto-e2e");
 
 test("desktop startup keeps window hidden until renderer is ready", async () => {

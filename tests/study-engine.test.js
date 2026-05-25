@@ -7,7 +7,10 @@ const {
   createStudyState,
   getCurrentStudyCard,
   getStudyBase,
+  isStudyProgressDue,
+  normalizeStudyProgressEntry,
   queuePendingStudyAnswer,
+  scheduleStudyProgressAnswer,
   undoStudyAnswer
 } = require("../js/study-engine.js");
 
@@ -172,7 +175,11 @@ function testUndoRestoresPreviousCardAfterAnswer() {
     seenCount: 2,
     correctCount: 1,
     lastResult: "wrong",
-    lastReviewedAt: "2026-04-01T12:00:00.000Z"
+    lastReviewedAt: "2026-04-01T12:00:00.000Z",
+    dueAt: null,
+    intervalDays: 0,
+    easeFactor: 2.5,
+    lapseCount: 0
   };
 
   advanceStudy(studyState, "correct", () => 0, { previousProgressEntry });
@@ -243,6 +250,63 @@ function testUndoRestoresRoundAfterCompletedRound() {
   assert.equal(studyState.roundCardIds.size, 0);
 }
 
+function testScheduleStudyProgressAnswerAddsDueDateAndEase() {
+  const nextEntry = scheduleStudyProgressAnswer(null, "correct", "2026-04-15T12:00:00.000Z");
+
+  assert.equal(nextEntry.seenCount, 1);
+  assert.equal(nextEntry.correctCount, 1);
+  assert.equal(nextEntry.intervalDays, 1);
+  assert.equal(nextEntry.easeFactor, 2.6);
+  assert.equal(nextEntry.lapseCount, 0);
+  assert.equal(nextEntry.dueAt, "2026-04-16T12:00:00.000Z");
+}
+
+function testScheduleStudyProgressAnswerUsesOverdueInterval() {
+  const nextEntry = scheduleStudyProgressAnswer({
+    seenCount: 3,
+    correctCount: 2,
+    intervalDays: 4,
+    easeFactor: 2.5,
+    dueAt: "2026-04-13T12:00:00.000Z"
+  }, "correct", "2026-04-15T12:00:00.000Z");
+
+  assert.equal(nextEntry.intervalDays, 13);
+  assert.equal(nextEntry.easeFactor, 2.6);
+  assert.equal(nextEntry.dueAt, "2026-04-28T12:00:00.000Z");
+}
+
+function testScheduleStudyProgressAnswerHandlesLapses() {
+  const nextEntry = scheduleStudyProgressAnswer({
+    seenCount: 8,
+    correctCount: 5,
+    intervalDays: 20,
+    easeFactor: 1.35,
+    lapseCount: 2,
+    dueAt: "2026-04-10T12:00:00.000Z"
+  }, "wrong", "2026-04-15T12:00:00.000Z");
+
+  assert.equal(nextEntry.intervalDays, 1);
+  assert.equal(nextEntry.easeFactor, 1.3);
+  assert.equal(nextEntry.lapseCount, 3);
+  assert.equal(nextEntry.dueAt, "2026-04-16T12:00:00.000Z");
+}
+
+function testStudyProgressDueSupportsLegacyEntries() {
+  assert.equal(isStudyProgressDue(null, "2026-04-15T12:00:00.000Z"), true);
+  assert.equal(isStudyProgressDue({
+    seenCount: 2,
+    correctCount: 1,
+    lastResult: "correct",
+    lastReviewedAt: "2026-04-14T12:00:00.000Z"
+  }, "2026-04-15T12:00:00.000Z"), true);
+  assert.equal(isStudyProgressDue({
+    seenCount: 2,
+    correctCount: 1,
+    dueAt: "2026-04-16T12:00:00.000Z"
+  }, "2026-04-15T12:00:00.000Z"), false);
+  assert.equal(normalizeStudyProgressEntry({ easeFactor: 9 }).easeFactor, 3);
+}
+
 testCreateStudyStateShufflesFirstRound();
 testCreateStudyStateMovesPreferredCardsToFront();
 testRoundDoesNotRepeatBeforeEveryCardAppears();
@@ -256,5 +320,9 @@ testUndoRestoresPreviousCardAfterAnswer();
 testUndoRestoresCardAfterPendingCommit();
 testUndoCanWalkBackMultipleAnswers();
 testUndoRestoresRoundAfterCompletedRound();
+testScheduleStudyProgressAnswerAddsDueDateAndEase();
+testScheduleStudyProgressAnswerUsesOverdueInterval();
+testScheduleStudyProgressAnswerHandlesLapses();
+testStudyProgressDueSupportsLegacyEntries();
 
 console.log("study-engine tests passed");
