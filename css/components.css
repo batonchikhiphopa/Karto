@@ -97,6 +97,17 @@
   justify-content: flex-end;
 }
 
+.lib-deck-row-name-static {
+  font-weight: 700;
+}
+
+.lib-deck-row.is-system-deck [data-action="edit"],
+.lib-deck-row.is-system-deck [data-action="merge"],
+.lib-deck-row.is-system-deck [data-action="share"],
+.lib-deck-row.is-system-deck [data-action="delete"] {
+  display: none;
+}
+
 .lib-empty {
   padding: 40px;
   text-align: center;

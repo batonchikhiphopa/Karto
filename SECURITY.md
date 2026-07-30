@@ -1,38 +1,30 @@
 # Security Policy
 
-## Supported versions
+## Supported version
 
-Security fixes are intended for the latest released version of Karto.
+Security fixes target the latest Karto 2.x release.
 
 ## Reporting a vulnerability
 
-Please report security issues privately through GitHub security advisories when available, or by opening a minimal issue that does not include exploit details.
+Use GitHub private security advisories when available. Otherwise open a minimal issue without exploit details and include the affected version, browser/OS, reproduction steps, and expected/actual behavior.
 
-Include:
+## Runtime model
 
-- affected version
-- operating system
-- clear reproduction steps
-- expected and actual behavior
+Karto is a static client-only PWA:
 
-## Local app security model
+- no Electron main process, Node integration, Express server, native addon, or filesystem access;
+- no provider credentials or application secrets;
+- browser IndexedDB is the authority for learning data;
+- a Content Security Policy blocks inline scripts, plugins, foreign frames, and non-HTTPS network access outside the app origin;
+- arbitrary article import is a direct browser request and remains subject to source CORS policy;
+- JSON import is normalized before legacy records are written to IndexedDB.
 
-Karto is an Electron desktop app. The renderer runs with `nodeIntegration: false`, `contextIsolation: true`, sandboxing, and a Content Security Policy. Desktop capabilities are exposed through a narrow preload bridge.
+Embedded data-URL images can make backups large. Remote images reveal the usual request metadata to their host when displayed.
 
-The renderer CSP blocks inline scripts. It still allows inline styles because a few interaction components update element styles at runtime, and it allows `http:` / `https:` images because cards can intentionally reference user-provided image links.
-
-Optional online lookup features call third-party services only when configured and used.
-
-## Dependency checks
-
-Run:
+## Local checks
 
 ```bash
-npm run audit
-```
-
-The production audit is part of the full local gate:
-
-```bash
-npm run test:all
+npm test
+npm run build
+npm audit --omit=dev
 ```
