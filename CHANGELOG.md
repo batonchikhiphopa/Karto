@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.0.0
+
+- Completed the runtime migration to React + TypeScript and removed Electron, Express, SQLite, and the legacy JavaScript views.
+- Replaced the desktop database with a versioned Dexie/IndexedDB schema for decks, cards, articles, sources, preferences, study scheduling, and sessions.
+- Added «Читаем с Карто» with German material selection, five categories, custom category sources, a five-item Esquire DE first-launch seed, URL/text import, an article reader, and word saving.
+- Rebuilt Home, card editing, Words, Progress, Settings, backups, and fullscreen Study while retaining the established tile and Study visual foundations.
+- Added PWA installation/offline caching, strict TypeScript checks, scheduler tests, and a browser-verified production build.
+- Added import compatibility for legacy Karto JSON decks.
+
+## Unreleased
+
+### Added
+
+- Integrated HardLeser as three native Karto sections: `Lesen`, `Wörter`, and `Fortschritt`.
+- Added an article reader with inline German word lookup, Russian/English translation, DWDS links, comprehension checks, and an offline lexical profile.
+- Added optional live DAFlex CEFR analysis through Karto's guarded local API.
+- Added local reading progress, reading streaks, topic comprehension, and vocabulary retention metrics.
+
+### Changed
+
+- Saved reader words now appear immediately under `Wörter` as local Karto cards and use Karto's existing due-card scheduler.
+- Removed the need for a manual HardLeser-to-Karto JSON handoff in the integrated workflow.
+- Kept the existing Home, Library, Settings, card editing, and study flows intact.
+
+### Tests
+
+- Added unit, API, SQLite, static-quality, and Electron end-to-end coverage for the HardLeser integration.
+
 ## 1.5.4
 
 ### Added

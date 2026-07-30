@@ -6,7 +6,6 @@ test-results/
 
 .env
 .env.*
-!.env.example
 
 *.log
 npm-debug.log*
@@ -24,5 +23,4 @@ Desktop.ini
 *.db
 *.sqlite
 *.sqlite3
-
-electron-builder.env
+.karto/

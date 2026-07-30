@@ -1,159 +1,62 @@
 # Karto
 
-[![CI](https://github.com/batonchikhiphopa/Karto/actions/workflows/ci.yml/badge.svg)](https://github.com/batonchikhiphopa/Karto/actions/workflows/ci.yml)
-
-Karto is a local-first desktop flashcard app for focused study. Build decks, add text and images, look up definitions or translations, and review with a keyboard-friendly study mode — without creating an account or sending your library to a cloud service.
-
-Your decks, progress, sessions, and settings live on your device in SQLite. Online helpers such as image search and translation are optional.
+Karto 2.0 is a local-first PWA for reading real language materials, saving useful words, and reviewing them as cards. The application is written in React and TypeScript; data stays in IndexedDB in the current browser profile.
 
 ![Karto](logo.svg)
 
-## Download / Run
+## What is included
 
-Download packaged builds from [GitHub Releases](https://github.com/batonchikhiphopa/Karto/releases).
+- «Читаем с Карто» with a material-language selector (`de` is active first).
+- German categories: Gesellschaft, Kultur & Unterhaltung, Arbeit & Leben, Technologie, and Style.
+- Five Esquire DE starter materials on first launch, with an offline fallback.
+- A custom source for each category.
+- Article import by an open URL or pasted text.
+- Reader word selection, DWDS lookup, and direct save to the system «Слова» deck.
+- Deck tiles, card editor, images, additional answer sides, and JSON backups.
+- Fullscreen Study with edge controls, keyboard shortcuts, undo, due dates, and local progress.
+- Installable and offline-capable static PWA.
 
-For development:
+## Run locally
+
+Requirements: Node.js 24 or newer for development tooling.
 
 ```bash
-git clone https://github.com/batonchikhiphopa/Karto.git
-cd Karto
 npm install
 npm start
 ```
 
-Karto runs as an Electron desktop app with an embedded local lookup API.
-
-## Why Karto
-
-- **Local-first by default**: SQLite storage on your machine, no account required.
-- **Fast card creation**: front/back text, image URL or upload, image search, dictionary definitions, and translations.
-- **Focused study mode**: large card display, keyboard controls, three answer ratings, due-card scheduling, and session summaries.
-- **Language-learning helpers**: multilingual UI and optional German article auto-insert for nouns.
-- **Portable backups**: import/export decks as JSON.
-- **Desktop polish**: startup verification, window preferences, offline-friendly core workflow, and packaged builds.
-
-## Screenshots
-
-### Home
-
-Your decks start immediately, with visual tiles and a quick create action.
-
-![Karto home screen](docs/screenshots/home.png)
-
-### Card Editor
-
-Create useful cards quickly with definitions, translations, images, and deck selection in one flow.
-
-![Karto card editor](docs/screenshots/card-editor.png)
-
-### Study Mode
-
-Review in a distraction-light fullscreen experience with keyboard and edge controls.
-
-![Karto study mode](docs/screenshots/study-mode.png)
-
-## Privacy
-
-Karto keeps the core learning data local:
-
-- decks and cards
-- study progress
-- recent study sessions
-- UI settings
-- desktop preferences
-
-Optional online integrations call third-party services only when you use the related feature. See [PRIVACY.md](PRIVACY.md) for details.
-
-## Configuration
-
-Create a `.env` file in the project root only if you want optional online integrations:
-
-```env
-# Optional: enables Unsplash image search
-UNSPLASH_ACCESS_KEY=your_unsplash_key_here
-
-# Optional: enables DeepL translation requests
-DEEPL_API_KEY=your_deepl_key_here
-
-# Optional overrides for the embedded local API server
-HOST=127.0.0.1
-PORT=3000
-```
-
-Without API keys, the desktop app still works. Only the related lookup features are disabled.
-
-## Development
-
-Requirements:
-
-- [Node.js](https://nodejs.org/) 24 or newer for development tooling
-
-Commands:
+Open the Vite URL shown in the terminal.
 
 ```bash
-npm start          # Launch the desktop app
-npm run lint       # Static quality checks
-npm test           # Unit/integration tests
-npm run test:e2e   # Electron smoke tests
-npm run audit      # Production dependency audit
-npm run test:all   # Full local quality gate
+npm test          # strict TypeScript check + scheduler tests
+npm run build     # static PWA in dist/
+npm run preview   # preview the production build
 ```
 
-Project planning and release notes:
+The production bundle does not need Node.js. Serve `dist/` from any HTTPS static host with an SPA fallback to `index.html`.
 
-- [Roadmap](docs/ROADMAP.md)
-- [Release checklist](docs/RELEASE_CHECKLIST.md)
-- [Security model](docs/SECURITY_MODEL.md)
+## Data and migration
 
-## Build And Distribution
+All decks, cards, images, articles, sources, settings, study progress, and sessions are stored in IndexedDB. Use Settings → «Скачать JSON» before clearing browser storage or moving to another browser/device.
 
-```bash
-npm run build
-npm run build:win
-npm run build:mac
-npm run build:linux
-```
+The importer supports Karto 2.0 backups and the legacy JSON deck format. A browser cannot directly open an old Electron SQLite database; export that data to JSON before switching.
 
-Generated installers and unpacked bundles are written to `dist/`.
+Direct article loading follows browser CORS rules. If a publisher blocks cross-origin access, paste the text in the same «Читать с Карто» dialog. No extraction proxy receives the article behind the scenes.
 
-CI currently runs quality checks, Electron smoke tests, and packaging verification on Windows. macOS and Linux build scripts are available for local packaging, but those artifacts should be published only after platform-specific verification.
+## Architecture
 
-Release practice:
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-- Commit source, tests, icons, screenshots, and build configuration.
-- Do not commit `dist/`, unpacked Electron bundles, installers, `.env`, or local databases.
-- Publish verified release artifacts through GitHub Releases.
-- Run `npm run test:all` before tagging a release.
+The two visual areas intentionally retained from the desktop generation are:
 
-## Project Structure
+- `css/screens/home.css` for deck tiles;
+- `css/screens/study.css` for fullscreen Study.
 
-```text
-Karto/
-├── app.js
-├── index.html
-├── main.js
-├── preload.js
-├── server.js
-├── css/
-├── js/
-│   ├── main/
-│   ├── server/
-│   ├── ui/
-│   └── views/
-├── tests/
-│   └── e2e/
-├── docs/
-│   └── screenshots/
-└── scripts/
-```
+Everything that executes at runtime is now React/TypeScript. Electron, Express, the SQLite repository, and legacy JavaScript views have been removed.
 
-## Security
+## Privacy and security
 
-Karto uses Electron with `nodeIntegration: false`, `contextIsolation: true`, sandboxing, a Content Security Policy, and guarded desktop APIs exposed through preload. See [SECURITY.md](SECURITY.md) for reporting and local security notes.
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md).
+See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md).
 
 ## License
 

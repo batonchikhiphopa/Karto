@@ -1,3 +1,17 @@
+.home-screen-toolbar {
+  min-height: 40px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.home-library-btn {
+  width: 40px;
+  height: 40px;
+  font-size: 1.15rem;
+}
+
 .deck-grid {
   --deck-grid-gap: 24px;
   --deck-tile-min-width: 270px;
@@ -280,6 +294,11 @@ html[data-theme="dark"] .deck-overlay {
 
 .tile-action:active {
   transform: translate3d(0, 0, 0) scale(0.95);
+}
+
+.deck-tile[data-system-deck="true"] [data-action="edit-deck"],
+.deck-tile[data-system-deck="true"] [data-action="delete-deck"] {
+  display: none;
 }
 
 .create-tile {

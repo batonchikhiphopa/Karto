@@ -1,16 +1,21 @@
 # Roadmap
 
-Karto is a local-first desktop flashcard app. The product direction is to keep study data private, make card creation fast, and keep review behavior understandable.
+## Current
 
-## Current Priorities
+- Validate the German Esquire starter selection and category mapping with regular use.
+- Add source-specific adapters only where the publisher exposes a browser-readable RSS/Atom/JSON feed.
+- Improve reading position and completion tracking.
+- Expand scheduler tests and backup migration fixtures.
 
-- Keep SQLite persistence reliable across app upgrades.
-- Improve spaced-repetition scheduling without adding unnecessary study UI.
-- Keep import/export simple and portable through JSON.
-- Maintain a small, testable Electron security surface.
+## Next
 
-## Later
+- Enable English, Russian, and Ukrainian material selections with their own sources.
+- Add optional per-source refresh controls and visible provenance/error states.
+- Add richer vocabulary context from the sentence where a word was saved.
+- Add install screenshots and platform-specific PWA guidance.
 
-- Add a visible due-card summary on Home.
-- Add optional deck-level study settings after the default scheduler has settled.
-- Revisit CSV only when there is a clear import/export workflow and tests for it.
+## Constraints
+
+- No mandatory account, server, cloud database, Electron, or native runtime.
+- Core reading, cards, Study, progress, and backups remain usable offline.
+- The Home tile and fullscreen Study visual language remain stable.
